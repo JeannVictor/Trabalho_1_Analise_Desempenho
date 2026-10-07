@@ -1,0 +1,42 @@
+# ---------- Binários compilados ----------
+*.o
+*.out
+*.exe
+simulacao_v3
+simulacao_v3_testes
+simulacao_v4
+
+# ---------- LaTeX auxiliar ----------
+*.aux
+*.log
+*.toc
+*.out
+*.bbl
+*.blg
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.nav
+*.snm
+*.vrb
+
+# ---------- Python ----------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---------- Sistema ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# ---------- Editores ----------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
