@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Executa os simuladores em C, salva CSV e gera gráficos."""
+"""Executa os simuladores em C, salva os CSVs e gera os gráficos."""
 
 import argparse
 import csv
 import math
 import os
+import shutil
 import subprocess
 import tempfile
 from collections import defaultdict
@@ -31,22 +32,50 @@ CENARIOS = [
     ("C3", 0.75, 1.0),
     ("C4", 0.90, 1.0),
     ("C5", 0.95, 1.0),
-    ("C6", 1.00, 1.0),
-    ("C7", 1.10, 1.0),
+    ("C6", 0.99, 1.0),
+    ("C7", 1.00, 1.0),
+    ("C8", 1.10, 1.0),
 ]
+
+ESTAVEIS = [cenario for cenario, lamb, mu in CENARIOS if lamb < mu]
 
 METRICAS = [
     "ocupacao", "en", "ew", "erro_little",
     "taxa_chegada", "vazao", "fila_final", "tempo_final",
 ]
 
+# Medidas que só a V4 calcula.
+EXTRAS = ["enq", "ewq", "fila_maxima", "w_direto", "w_p50", "w_p95",
+          "little_direto"]
+
+# Experimento de aquecimento (só V4): janela de observação fixa, depois de
+# descartar períodos iniciais de tamanhos diferentes.
+CENARIOS_AQUECIMENTO = ["C4", "C5", "C6"]
+JANELA_AQUECIMENTO = 10_000.0
+AQUECIMENTOS = [0.0, 1_000.0, 10_000.0, 100_000.0]
+# Com rho = 0,99 e janela curta, as médias por execução variam muito; com
+# 30 repetições o IC t não se mostrou estável, por isso aqui são usadas 200.
+REPETICOES_AQUECIMENTO = 200
+
+MEDIDAS = [("ocupacao", "Ocupação"), ("en", r"$E[N]$"), ("ew", r"$E[W]$")]
+
+# Figuras citadas no main.tex; são copiadas para artigo/imagem.
+FIGURAS_ARTIGO = [
+    "teoria_simulacao_v4", "convergencia_v4", "boxplots_en_v4",
+    "fluxo_v4", "populacao_final_horizonte_v4", "excesso_horizonte_v3",
+    "comparacao_v3_v4", "aquecimento_v4",
+]
+
 
 def argumentos():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--versao", choices=["v3", "v4", "ambas"], default="v3")
+    parser.add_argument("--versao", choices=["v3", "v4", "ambas"], default="ambas")
     parser.add_argument("--repeticoes", type=int, default=30)
     parser.add_argument("--rapido", action="store_true")
-    parser.add_argument("--saida", type=Path, default=PASTA / "resultados")
+    parser.add_argument("--saida", type=Path, default=PASTA / "dados")
+    parser.add_argument("--figuras", type=Path, default=PASTA / "dados" / "figuras")
+    parser.add_argument("--artigo", type=Path,
+                        default=PASTA.parent / "artigo" / "imagem")
     return parser.parse_args()
 
 
@@ -58,8 +87,10 @@ def compilar(fonte, executavel):
     subprocess.run(comando, check=True)
 
 
-def executar(executavel, lamb, mu, horizonte, semente):
+def executar(executavel, lamb, mu, horizonte, semente, aquecimento=None):
     entrada = f"{1.0/lamb}\n{1.0/mu}\n{horizonte}\n{semente}\n"
+    if aquecimento is not None:
+        entrada += f"{aquecimento}\n"
     processo = subprocess.run(
         [str(executavel)], input=entrada, text=True,
         capture_output=True, check=True,
@@ -72,17 +103,33 @@ def executar(executavel, lamb, mu, horizonte, semente):
     faltantes = [metrica for metrica in METRICAS if metrica not in valores]
     if faltantes:
         raise RuntimeError(f"Saída incompleta: {', '.join(faltantes)}")
+    if "w_direto" in valores and valores["en"] > 0.0:
+        # Lei de Little com o W medido cliente a cliente: diferença relativa
+        # (%) entre E[N] e lambda * W. Ao contrário de erro_little, não é
+        # nula por construção.
+        valores["little_direto"] = 100.0 * (
+            valores["en"] - valores["taxa_chegada"] * valores["w_direto"]
+        ) / valores["en"]
     return valores
 
 
 def teoria(lamb, mu):
     rho = lamb / mu
     if rho >= 1.0:
-        return {"ocupacao": rho, "en": math.nan, "ew": math.nan}
+        # Sem regime estacionário: o servidor tende a ficar sempre ocupado.
+        return {"ocupacao": 1.0, "en": math.nan, "ew": math.nan,
+                "enq": math.nan, "ewq": math.nan, "w_direto": math.nan,
+                "w_p50": math.nan, "w_p95": math.nan}
     return {
         "ocupacao": rho,
         "en": rho / (1.0 - rho),
         "ew": 1.0 / (mu - lamb),
+        "enq": rho * rho / (1.0 - rho),
+        "ewq": rho / (mu - lamb),
+        # Na M/M/1 FCFS, W é exponencial de taxa mu - lambda.
+        "w_direto": 1.0 / (mu - lamb),
+        "w_p50": math.log(2.0) / (mu - lamb),
+        "w_p95": math.log(20.0) / (mu - lamb),
     }
 
 
@@ -110,10 +157,10 @@ def salvar_csv(caminho, linhas):
         escritor.writerows(linhas)
 
 
-def resumir(resultados):
+def resumir(resultados, campo="horizonte"):
     grupos = defaultdict(list)
     for resultado in resultados:
-        chave = (resultado["versao"], resultado["cenario"], resultado["horizonte"])
+        chave = (resultado["versao"], resultado["cenario"], resultado[campo])
         grupos[chave].append(resultado)
 
     resumo = []
@@ -127,10 +174,11 @@ def resumir(resultados):
             "lambda": lamb,
             "mu": mu,
             "rho": lamb / mu,
-            "horizonte": horizonte,
+            campo: horizonte,
             "repeticoes": len(linhas),
         }
-        for metrica in METRICAS:
+        extras = [extra for extra in EXTRAS if extra in linhas[0]]
+        for metrica in METRICAS + extras:
             media, inferior, superior = intervalo_confianca(
                 [item[metrica] for item in linhas]
             )
@@ -149,241 +197,219 @@ def resumir(resultados):
     return resumo
 
 
+def barras_erro(linhas, metrica):
+    """Distâncias da média até os limites do IC, no formato do errorbar."""
+    inferior = [
+        linha[f"{metrica}_media"] - linha[f"{metrica}_ic_inferior"]
+        for linha in linhas
+    ]
+    superior = [
+        linha[f"{metrica}_ic_superior"] - linha[f"{metrica}_media"]
+        for linha in linhas
+    ]
+    return [inferior, superior]
+
+
+def maior_horizonte(resumo, versao):
+    dados = [linha for linha in resumo if linha["versao"] == versao]
+    horizonte = max(linha["horizonte"] for linha in dados)
+    return sorted(
+        [linha for linha in dados if linha["horizonte"] == horizonte],
+        key=lambda linha: linha["rho"],
+    )
+
+
 def salvar_figura(figura, pasta, nome):
+    # PDF é vetorial: não perde qualidade quando o LaTeX redimensiona a figura.
     pasta.mkdir(parents=True, exist_ok=True)
-    figura.savefig(pasta / f"{nome}.png", dpi=200, bbox_inches="tight")
+    figura.tight_layout()
     figura.savefig(pasta / f"{nome}.pdf", bbox_inches="tight")
     plt.close(figura)
 
 
-def grafico_convergencia(resumo, versao, pasta):
-    dados = [linha for linha in resumo if linha["versao"] == versao and linha["rho"] < 1.0]
-    fig, eixos = plt.subplots(1, 3, figsize=(15, 4.8))
-    configuracoes = [
-        ("ocupacao", "Ocupação"),
-        ("en", r"$E[N]$"),
-        ("ew", r"$E[W]$"),
-    ]
-    for cenario, _, _ in CENARIOS[:5]:
-        linhas = sorted(
-            [linha for linha in dados if linha["cenario"] == cenario],
-            key=lambda linha: linha["horizonte"],
-        )
-        for eixo, (metrica, titulo) in zip(eixos, configuracoes):
-            x = [linha["horizonte"] for linha in linhas]
-            y = [linha[f"{metrica}_media"] for linha in linhas]
-            erro_inferior = [
-                linha[f"{metrica}_media"] - linha[f"{metrica}_ic_inferior"]
-                for linha in linhas
-            ]
-            erro_superior = [
-                linha[f"{metrica}_ic_superior"] - linha[f"{metrica}_media"]
-                for linha in linhas
-            ]
-            barras = eixo.errorbar(
-                x, y, yerr=[erro_inferior, erro_superior],
-                marker="o", capsize=3, label=cenario,
-            )
-            cor = barras.lines[0].get_color()
-            eixo.axhline(linhas[0][f"{metrica}_teorico"], color=cor,
-                         linestyle=":", alpha=0.45)
-            eixo.set_xscale("log")
-            eixo.set_xlabel("Tempo de simulação")
-            eixo.set_ylabel(titulo)
-            eixo.grid(alpha=0.25)
-    eixos[0].legend()
-    fig.suptitle(f"Convergência — {versao.upper()}")
-    fig.tight_layout()
-    salvar_figura(fig, pasta, f"convergencia_{versao}")
-
-
 def grafico_teoria(resumo, versao, pasta):
-    dados = [linha for linha in resumo if linha["versao"] == versao and linha["rho"] < 1.0]
-    maior_horizonte = max(linha["horizonte"] for linha in dados)
-    dados = sorted(
-        [linha for linha in dados if linha["horizonte"] == maior_horizonte],
-        key=lambda linha: linha["rho"],
-    )
-    fig, eixos = plt.subplots(1, 3, figsize=(15, 4.8))
-    for eixo, (metrica, titulo) in zip(
-        eixos, [("ocupacao", "Ocupação"), ("en", r"$E[N]$"), ("ew", r"$E[W]$")]
-    ):
-        x = [linha["rho"] for linha in dados]
-        y = [linha[f"{metrica}_media"] for linha in dados]
-        erro_inferior = [
-            linha[f"{metrica}_media"] - linha[f"{metrica}_ic_inferior"] for linha in dados
-        ]
-        erro_superior = [
-            linha[f"{metrica}_ic_superior"] - linha[f"{metrica}_media"] for linha in dados
-        ]
-        eixo.errorbar(x, y, yerr=[erro_inferior, erro_superior],
-                      fmt="o", capsize=4, label="Simulação")
-        eixo.plot(x, [linha[f"{metrica}_teorico"] for linha in dados],
-                  "s-", color="black", label="Teoria")
-        eixo.set_xlabel(r"Utilização $\rho$")
-        eixo.set_ylabel(titulo)
-        eixo.grid(alpha=0.25)
-    eixos[0].legend()
-    fig.suptitle(f"Teoria e simulação — {versao.upper()} — T={maior_horizonte:g}")
-    fig.tight_layout()
+    """E[N] contra rho: curva teórica contínua e médias de dois horizontes."""
+    dados = [linha for linha in resumo
+             if linha["versao"] == versao and linha["rho"] < 1.0]
+    maior = max(linha["horizonte"] for linha in dados)
+    fig, eixo = plt.subplots(figsize=(5, 3.8))
+    # A curva é calculada numa grade fina; ligar só os seis pontos por
+    # retas sugeriria valores falsos entre os cenários.
+    grade = [0.2 + i * (0.992 - 0.2) / 400 for i in range(401)]
+    eixo.plot(grade, [r / (1.0 - r) for r in grade], color="black",
+              label=r"Teoria $\rho/(1-\rho)$")
+    for horizonte, marcador in [(maior / 100, "s"), (maior, "o")]:
+        linhas = sorted([linha for linha in dados if linha["horizonte"] == horizonte],
+                        key=lambda linha: linha["rho"])
+        eixo.errorbar([linha["rho"] for linha in linhas],
+                      [linha["en_media"] for linha in linhas],
+                      yerr=barras_erro(linhas, "en"), fmt=marcador, capsize=3,
+                      label=f"Simulação, $T=10^{round(math.log10(horizonte))}$")
+    eixo.set_yscale("log")
+    eixo.set_xlabel(r"Utilização $\rho$")
+    eixo.set_ylabel(r"$E[N]$")
+    eixo.grid(alpha=0.25)
+    eixo.legend()
     salvar_figura(fig, pasta, f"teoria_simulacao_{versao}")
 
 
-def grafico_erros(resumo, versao, pasta):
-    dados = [linha for linha in resumo if linha["versao"] == versao and linha["rho"] < 1.0]
-    maior_horizonte = max(linha["horizonte"] for linha in dados)
-    dados = sorted(
-        [linha for linha in dados if linha["horizonte"] == maior_horizonte],
-        key=lambda linha: linha["rho"],
-    )
-    fig, eixo = plt.subplots(figsize=(9, 5))
-    for metrica, rotulo in [("ocupacao", "Ocupação"), ("en", "E[N]"), ("ew", "E[W]")]:
-        eixo.plot(
-            [linha["rho"] for linha in dados],
-            [linha[f"{metrica}_erro_relativo"] for linha in dados],
-            marker="o", label=rotulo,
-        )
-    eixo.set_xlabel(r"Utilização $\rho$")
-    eixo.set_ylabel("Erro relativo (%)")
-    eixo.grid(alpha=0.25)
-    eixo.legend()
-    fig.tight_layout()
-    salvar_figura(fig, pasta, f"erros_relativos_{versao}")
+def grafico_convergencia(resumo, versao, pasta):
+    """Médias divididas pelo valor teórico, em função do horizonte."""
+    dados = [linha for linha in resumo if linha["versao"] == versao]
+    fig, eixos = plt.subplots(2, 1, figsize=(5, 6.5), sharex=True)
+    # E[W] fica de fora: o simulador calcula E[W] = E[N] / lambda observado,
+    # então sua curva repete a de E[N].
+    for eixo, (metrica, titulo) in zip(eixos, MEDIDAS[:2]):
+        for cenario in ESTAVEIS:
+            linhas = sorted([linha for linha in dados if linha["cenario"] == cenario],
+                            key=lambda linha: linha["horizonte"])
+            teorico = linhas[0][f"{metrica}_teorico"]
+            # Dividir pelo teórico é linear: o IC da razão é o IC da média / teórico.
+            eixo.errorbar([linha["horizonte"] for linha in linhas],
+                          [linha[f"{metrica}_media"] / teorico for linha in linhas],
+                          yerr=[[e / teorico for e in lado]
+                                for lado in barras_erro(linhas, metrica)],
+                          marker="o", capsize=3, label=cenario)
+        eixo.axhline(1.0, linestyle=":", color="black")
+        eixo.set_xscale("log")
+        eixo.set_xlim(50, 2e6)
+        eixo.set_ylabel(f"{titulo} simulado / teórico")
+        eixo.grid(alpha=0.25)
+    eixos[-1].set_xlabel("Horizonte de simulação $T$")
+    eixos[-1].legend(ncol=3, fontsize="small", loc="lower right")
+    salvar_figura(fig, pasta, f"convergencia_{versao}")
+
+
+def grafico_boxplots(resultados, versao, pasta):
+    """Dispersão de E[N] entre execuções no maior horizonte."""
+    dados = [linha for linha in resultados
+             if linha["versao"] == versao and linha["rho"] < 1.0]
+    horizonte = max(linha["horizonte"] for linha in dados)
+    dados = [linha for linha in dados if linha["horizonte"] == horizonte]
+    fig, eixo = plt.subplots(figsize=(5, 3.4))
+    # Cada valor é dividido pelo teórico para comparar cenários na mesma escala.
+    valores = [
+        [linha["en"] / teoria(linha["lambda"], linha["mu"])["en"]
+         for linha in dados if linha["cenario"] == cenario]
+        for cenario in ESTAVEIS
+    ]
+    eixo.boxplot(valores, showmeans=True)
+    eixo.axhline(1.0, linestyle=":", color="black")
+    eixo.set_xticks(range(1, len(ESTAVEIS) + 1), ESTAVEIS)
+    eixo.set_ylabel(r"$E[N]$ simulado / teórico")
+    eixo.grid(axis="y", alpha=0.25)
+    salvar_figura(fig, pasta, f"boxplots_en_{versao}")
 
 
 def grafico_fluxo(resumo, versao, pasta):
-    dados = [linha for linha in resumo if linha["versao"] == versao]
-    if not dados:
-        return
-    maior_horizonte = max(linha["horizonte"] for linha in dados)
-    dados = sorted(
-        [linha for linha in dados if linha["horizonte"] == maior_horizonte],
-        key=lambda linha: linha["rho"],
-    )
-    fig, eixo = plt.subplots(figsize=(9, 5))
+    dados = maior_horizonte(resumo, versao)
+    fig, eixo = plt.subplots(figsize=(5, 3.6))
     x = [linha["rho"] for linha in dados]
-    for metrica, rotulo in [
-        ("taxa_chegada", "Taxa de chegada observada"),
-        ("vazao", "Vazão observada"),
+    for metrica, rotulo, marcador in [
+        ("taxa_chegada", "Taxa de chegada observada", "o"),
+        ("vazao", "Vazão observada", "s"),
     ]:
-        y = [linha[f"{metrica}_media"] for linha in dados]
-        inferior = [
-            linha[f"{metrica}_media"] - linha[f"{metrica}_ic_inferior"]
-            for linha in dados
-        ]
-        superior = [
-            linha[f"{metrica}_ic_superior"] - linha[f"{metrica}_media"]
-            for linha in dados
-        ]
-        eixo.errorbar(
-            x, y, yerr=[inferior, superior], marker="o", capsize=4,
-            label=rotulo,
-        )
-    eixo.plot(x, [linha["lambda"] for linha in dados], "--", color="gray",
-              label=r"Taxa configurada $\lambda$")
-    eixo.axhline(1.0, linestyle=":", color="black", label=r"Capacidade $\mu=1$")
+        eixo.errorbar(x, [linha[f"{metrica}_media"] for linha in dados],
+                      yerr=barras_erro(dados, metrica),
+                      fmt=marcador, capsize=4, label=rotulo)
+    # Vazão teórica de longo prazo: min(lambda, mu).
+    eixo.plot([0.2, 1.0, 1.15], [0.2, 1.0, 1.0], color="black", linewidth=1,
+              label=r"Vazão teórica $\min(\lambda,\mu)$")
     eixo.set_xlabel(r"Utilização $\rho$")
-    eixo.set_ylabel("Requisições por unidade de tempo")
+    eixo.set_ylabel("Solicitações por unidade de tempo")
     eixo.grid(alpha=0.25)
     eixo.legend()
-    fig.suptitle(f"Chegadas e vazão — {versao.upper()} — T={maior_horizonte:g}")
-    fig.tight_layout()
     salvar_figura(fig, pasta, f"fluxo_{versao}")
 
 
-def grafico_excesso_horizonte(resumo, versao, pasta):
+def grafico_populacao_horizonte(resumo, versao, pasta):
+    """População final de C6 a C8 em função de T, com as previsões teóricas."""
     dados = [linha for linha in resumo if linha["versao"] == versao]
-    if not dados:
-        return
-    fig, eixo = plt.subplots(figsize=(9, 5))
-    for cenario, _, _ in CENARIOS:
-        linhas = sorted(
-            [linha for linha in dados if linha["cenario"] == cenario],
-            key=lambda linha: linha["horizonte"],
-        )
+    fig, eixo = plt.subplots(figsize=(5, 3.8))
+    referencias = {
+        # Estável: N(T) tende à distribuição estacionária, de média rho/(1-rho).
+        "C6": lambda t, lamb, mu: (lamb / mu) / (1.0 - lamb / mu),
+        # Crítico: N(T) se comporta como |passeio aleatório| de variância 2T.
+        "C7": lambda t, lamb, mu: math.sqrt(4.0 * t / math.pi),
+        # Sobrecarregado: o excesso de chegadas se acumula linearmente.
+        "C8": lambda t, lamb, mu: (lamb - mu) * t,
+    }
+    for cenario, referencia in referencias.items():
+        linhas = sorted([linha for linha in dados if linha["cenario"] == cenario],
+                        key=lambda linha: linha["horizonte"])
         x = [linha["horizonte"] for linha in linhas]
-        y = [linha["tempo_final_media"] - linha["horizonte"] for linha in linhas]
-        inferior = [
-            min(
-                linha["tempo_final_media"] - linha["tempo_final_ic_inferior"],
-                linha["tempo_final_media"] - linha["horizonte"],
-            ) for linha in linhas
-        ]
-        superior = [
-            linha["tempo_final_ic_superior"] - linha["tempo_final_media"]
-            for linha in linhas
-        ]
-        eixo.errorbar(x, y, yerr=[inferior, superior], marker="o",
-                      capsize=3, label=cenario)
-    eixo.set_xscale("log")
-    eixo.set_xlabel("Horizonte solicitado")
-    eixo.set_ylabel("Tempo efetivo − horizonte")
-    eixo.grid(alpha=0.25)
-    eixo.legend()
-    fig.suptitle(f"Ultrapassagem do horizonte — {versao.upper()}")
-    fig.tight_layout()
-    salvar_figura(fig, pasta, f"excesso_horizonte_{versao}")
-
-
-def grafico_populacao_rho(resumo, versao, pasta):
-    dados = [linha for linha in resumo if linha["versao"] == versao]
-    if not dados:
-        return
-    fig, eixo = plt.subplots(figsize=(9, 5))
-    for horizonte in sorted({linha["horizonte"] for linha in dados}):
-        linhas = sorted(
-            [linha for linha in dados if linha["horizonte"] == horizonte],
-            key=lambda linha: linha["rho"],
+        barras = eixo.errorbar(
+            x, [linha["fila_final_media"] for linha in linhas],
+            yerr=barras_erro(linhas, "fila_final"), marker="o", linestyle="none",
+            capsize=3, label=fr"{cenario} ($\rho={linhas[0]['rho']:g}$)",
         )
-        x = [linha["rho"] for linha in linhas]
-        y = [linha["fila_final_media"] for linha in linhas]
-        inferior = [
-            min(
-                linha["fila_final_media"] - linha["fila_final_ic_inferior"],
-                max(linha["fila_final_media"] - 1e-3, 0.0),
-            ) for linha in linhas
-        ]
-        superior = [
-            linha["fila_final_ic_superior"] - linha["fila_final_media"]
-            for linha in linhas
-        ]
-        eixo.errorbar(x, y, yerr=[inferior, superior], marker="o",
-                      capsize=3, label=f"T={horizonte:g}")
-    eixo.axvline(1.0, linestyle=":", color="black", label=r"$\rho=1$")
+        cor = barras.lines[0].get_color()
+        grade = [10 ** (2 + i * 4 / 100) for i in range(101)]
+        lamb, mu = linhas[0]["lambda"], linhas[0]["mu"]
+        eixo.plot(grade, [referencia(t, lamb, mu) for t in grade],
+                  color=cor, linestyle="--", linewidth=1)
+    eixo.set_xscale("log")
     eixo.set_yscale("log")
-    eixo.set_xlabel(r"Utilização $\rho$")
-    eixo.set_ylabel("População final média")
+    eixo.set_xlabel("Horizonte de simulação $T$")
+    eixo.set_ylabel(r"População final média $N(T)$")
     eixo.grid(alpha=0.25)
     eixo.legend()
-    fig.suptitle(f"População final em função da carga — {versao.upper()}")
-    fig.tight_layout()
-    salvar_figura(fig, pasta, f"populacao_final_rho_{versao}")
+    salvar_figura(fig, pasta, f"populacao_final_horizonte_{versao}")
+
+
+def grafico_excesso_horizonte(resultados, pasta):
+    """Quanto a V3 passa do horizonte, por carga, com a previsão teórica."""
+    fig, eixo = plt.subplots(figsize=(5, 3.4))
+    x, medias, erros = [], [], []
+    for cenario, lamb, mu in CENARIOS:
+        # O excesso não depende de T, então todos os horizontes são reunidos.
+        excesso = [linha["tempo_final"] - linha["horizonte"] for linha in resultados
+                   if linha["versao"] == "v3" and linha["cenario"] == cenario]
+        media, inferior, _ = intervalo_confianca(excesso)
+        x.append(lamb / mu)
+        medias.append(media)
+        erros.append(media - inferior)
+    eixo.errorbar(x, medias, yerr=erros, fmt="o", capsize=4,
+                  label="V3 (média e IC de 95%)")
+    # Pela falta de memória, o tempo até o próximo evento depois de T é
+    # exponencial de taxa lambda (servidor ocioso) ou lambda + mu (ocupado).
+    grade = [0.2 + i * (1.15 - 0.2) / 200 for i in range(201)]
+    eixo.plot(grade, [(1 - min(r, 1)) / r + min(r, 1) / (r + 1) for r in grade],
+              color="black", linewidth=1,
+              label=r"Teoria $(1-\rho)/\lambda + \rho/(\lambda+\mu)$")
+    eixo.set_xlabel(r"Utilização $\rho$")
+    eixo.set_ylabel(r"Tempo final $-$ $T$")
+    eixo.grid(alpha=0.25)
+    eixo.legend()
+    salvar_figura(fig, pasta, "excesso_horizonte_v3")
 
 
 def grafico_comparacao(resultados, pasta):
-    versoes = {linha["versao"] for linha in resultados}
-    if versoes != {"v3", "v4"}:
-        return
     indices = defaultdict(dict)
     for linha in resultados:
         chave = (linha["cenario"], linha["horizonte"], linha["repeticao"])
         indices[chave][linha["versao"]] = linha
 
-    fig, eixos = plt.subplots(1, 3, figsize=(15, 4.8))
-    for eixo, (metrica, titulo) in zip(
-        eixos, [("ocupacao", "Ocupação"), ("en", r"$E[N]$"), ("ew", r"$E[W]$")]
-    ):
-        for cenario, _, _ in CENARIOS[:5]:
+    # Ocupação em diferença absoluta (mesma escala em todos os cenários);
+    # E[N] em diferença relativa, porque varia de 0,33 a 99 entre cenários.
+    paineis = [
+        ("ocupacao", "V3 $-$ V4: ocupação", lambda v3, v4: v3 - v4),
+        ("en", r"V3 $-$ V4: $E[N]$ (%)", lambda v3, v4: 100.0 * (v3 - v4) / v4),
+    ]
+    fig, eixos = plt.subplots(2, 1, figsize=(5, 6.5), sharex=True)
+    for eixo, (metrica, titulo, diferenca) in zip(eixos, paineis):
+        for cenario in ESTAVEIS:
             horizontes = sorted({chave[1] for chave in indices if chave[0] == cenario})
             medias = []
             inferiores = []
             superiores = []
             for horizonte in horizontes:
-                diferencas = []
-                for chave, pares in indices.items():
-                    if chave[0] == cenario and chave[1] == horizonte \
-                            and "v3" in pares and "v4" in pares:
-                        diferencas.append(pares["v3"][metrica] - pares["v4"][metrica])
+                diferencas = [
+                    diferenca(pares["v3"][metrica], pares["v4"][metrica])
+                    for chave, pares in indices.items()
+                    if chave[0] == cenario and chave[1] == horizonte
+                    and pares["v4"][metrica] != 0.0
+                ]
                 media, inferior, superior = intervalo_confianca(diferencas)
                 medias.append(media)
                 inferiores.append(media - inferior)
@@ -392,39 +418,36 @@ def grafico_comparacao(resultados, pasta):
                           marker="o", capsize=3, label=cenario)
         eixo.axhline(0.0, linestyle=":", color="black")
         eixo.set_xscale("log")
-        eixo.set_xlabel("Tempo de simulação")
-        eixo.set_ylabel(f"V3 − V4: {titulo}")
+        eixo.set_xlim(50, 2e6)
+        eixo.set_ylabel(titulo)
         eixo.grid(alpha=0.25)
-    eixos[0].legend()
-    fig.suptitle("Efeito das correções do V4")
-    fig.tight_layout()
+    eixos[-1].set_xlabel("Horizonte de simulação $T$")
+    eixos[0].legend(ncol=3, fontsize="small")
     salvar_figura(fig, pasta, "comparacao_v3_v4")
 
 
-def grafico_boxplots(resultados, versao, pasta):
-    dados = [
-        linha for linha in resultados
-        if linha["versao"] == versao and linha["rho"] < 1.0
-    ]
-    if not dados:
-        return
-    maior_horizonte = max(linha["horizonte"] for linha in dados)
-    dados = [linha for linha in dados if linha["horizonte"] == maior_horizonte]
-    cenarios = [cenario for cenario, _, _ in CENARIOS[:5]]
-    fig, eixos = plt.subplots(1, 2, figsize=(12, 5))
-    for eixo, (metrica, titulo) in zip(eixos, [("en", r"$E[N]$"), ("ew", r"$E[W]$")]):
-        valores = [
-            [linha[metrica] for linha in dados if linha["cenario"] == cenario]
-            for cenario in cenarios
-        ]
-        eixo.boxplot(valores, showmeans=True)
-        eixo.set_xticks(range(1, len(cenarios) + 1), cenarios)
-        eixo.set_ylabel(titulo)
-        eixo.set_yscale("log")
-        eixo.grid(axis="y", alpha=0.25)
-    fig.suptitle(f"Variabilidade entre repetições — {versao.upper()} — T={maior_horizonte:g}")
-    fig.tight_layout()
-    salvar_figura(fig, pasta, f"boxplots_en_ew_{versao}")
+def grafico_aquecimento(resumo, pasta):
+    """E[N]/teórico numa janela fixa, para cada período de aquecimento."""
+    fig, eixo = plt.subplots(figsize=(5, 3.6))
+    posicoes = range(len(AQUECIMENTOS))
+    for cenario in CENARIOS_AQUECIMENTO:
+        linhas = sorted([linha for linha in resumo if linha["cenario"] == cenario],
+                        key=lambda linha: linha["aquecimento"])
+        teorico = linhas[0]["en_teorico"]
+        eixo.errorbar(posicoes, [linha["en_media"] / teorico for linha in linhas],
+                      yerr=[[e / teorico for e in lado]
+                            for lado in barras_erro(linhas, "en")],
+                      marker="o", capsize=3,
+                      label=fr"{cenario} ($\rho={linhas[0]['rho']:g}$)")
+    eixo.axhline(1.0, linestyle=":", color="black")
+    # O eixo é categórico porque o aquecimento zero não cabe em escala log.
+    eixo.set_xticks(list(posicoes),
+                    ["0"] + [f"$10^{round(math.log10(a))}$" for a in AQUECIMENTOS[1:]])
+    eixo.set_xlabel(f"Aquecimento descartado (s); janela de $10^{round(math.log10(JANELA_AQUECIMENTO))}$ s")
+    eixo.set_ylabel(r"$E[N]$ simulado / teórico")
+    eixo.grid(alpha=0.25)
+    eixo.legend(fontsize="small")
+    salvar_figura(fig, pasta, "aquecimento_v4")
 
 
 def salvar_tabela_little(resultados, caminho):
@@ -444,12 +467,42 @@ def salvar_tabela_little(resultados, caminho):
     salvar_csv(caminho, linhas)
 
 
+def experimento_aquecimento(fonte, repeticoes):
+    resultados = []
+    with tempfile.TemporaryDirectory() as pasta_binarios:
+        executavel = Path(pasta_binarios) / "simulacao_v4"
+        compilar(fonte, executavel)
+        for cenario, lamb, mu in CENARIOS:
+            if cenario not in CENARIOS_AQUECIMENTO:
+                continue
+            indice_cenario = CENARIOS_AQUECIMENTO.index(cenario)
+            for indice, aquecimento in enumerate(AQUECIMENTOS):
+                for repeticao in range(1, repeticoes + 1):
+                    # Faixa de sementes separada da do experimento principal.
+                    semente = 20_000_000 + indice_cenario * 100_000 \
+                        + indice * 1_000 + repeticao
+                    valores = executar(executavel, lamb, mu,
+                                       aquecimento + JANELA_AQUECIMENTO,
+                                       semente, aquecimento)
+                    resultados.append({
+                        "versao": "v4",
+                        "cenario": cenario,
+                        "lambda": lamb,
+                        "mu": mu,
+                        "rho": lamb / mu,
+                        "aquecimento": aquecimento,
+                        "repeticao": repeticao,
+                        "semente": semente,
+                        **valores,
+                    })
+    return resultados
+
+
 def main():
     args = argumentos()
     args.saida.mkdir(parents=True, exist_ok=True)
-    pasta_figuras = args.saida / "figuras"
     horizontes = [100.0, 1_000.0, 10_000.0] if args.rapido else [
-        100.0, 1_000.0, 10_000.0, 100_000.0,
+        100.0, 1_000.0, 10_000.0, 100_000.0, 1_000_000.0,
     ]
     repeticoes = 5 if args.rapido else args.repeticoes
     versoes = ["v3", "v4"] if args.versao == "ambas" else [args.versao]
@@ -462,29 +515,30 @@ def main():
     total = len(versoes) * len(CENARIOS) * len(horizontes) * repeticoes
     contador = 0
 
-    for versao in versoes:
-        executavel = args.saida / f"simulacao_{versao}"
-        compilar(fontes[versao], executavel)
-        for indice_cenario, (cenario, lamb, mu) in enumerate(CENARIOS):
-            for indice_horizonte, horizonte in enumerate(horizontes):
-                for repeticao in range(1, repeticoes + 1):
-                    semente = 10_000_000 + indice_cenario * 100_000 \
-                        + indice_horizonte * 1_000 + repeticao
-                    valores = executar(executavel, lamb, mu, horizonte, semente)
-                    resultados.append({
-                        "versao": versao,
-                        "cenario": cenario,
-                        "lambda": lamb,
-                        "mu": mu,
-                        "rho": lamb / mu,
-                        "horizonte": horizonte,
-                        "repeticao": repeticao,
-                        "semente": semente,
-                        **valores,
-                    })
-                    contador += 1
-                    if contador % 50 == 0 or contador == total:
-                        print(f"{contador}/{total}")
+    with tempfile.TemporaryDirectory() as pasta_binarios:
+        for versao in versoes:
+            executavel = Path(pasta_binarios) / f"simulacao_{versao}"
+            compilar(fontes[versao], executavel)
+            for indice_cenario, (cenario, lamb, mu) in enumerate(CENARIOS):
+                for indice_horizonte, horizonte in enumerate(horizontes):
+                    for repeticao in range(1, repeticoes + 1):
+                        semente = 10_000_000 + indice_cenario * 100_000 \
+                            + indice_horizonte * 1_000 + repeticao
+                        valores = executar(executavel, lamb, mu, horizonte, semente)
+                        resultados.append({
+                            "versao": versao,
+                            "cenario": cenario,
+                            "lambda": lamb,
+                            "mu": mu,
+                            "rho": lamb / mu,
+                            "horizonte": horizonte,
+                            "repeticao": repeticao,
+                            "semente": semente,
+                            **valores,
+                        })
+                        contador += 1
+                        if contador % 50 == 0 or contador == total:
+                            print(f"{contador}/{total}")
 
     resumo = resumir(resultados)
     nome = args.versao
@@ -493,14 +547,27 @@ def main():
     salvar_tabela_little(resultados, args.saida / f"little_{nome}.csv")
 
     for versao in versoes:
-        grafico_convergencia(resumo, versao, pasta_figuras)
-        grafico_teoria(resumo, versao, pasta_figuras)
-        grafico_erros(resumo, versao, pasta_figuras)
-        grafico_fluxo(resumo, versao, pasta_figuras)
-        grafico_excesso_horizonte(resumo, versao, pasta_figuras)
-        grafico_populacao_rho(resumo, versao, pasta_figuras)
-        grafico_boxplots(resultados, versao, pasta_figuras)
-    grafico_comparacao(resultados, pasta_figuras)
+        grafico_teoria(resumo, versao, args.figuras)
+        grafico_convergencia(resumo, versao, args.figuras)
+        grafico_boxplots(resultados, versao, args.figuras)
+        grafico_fluxo(resumo, versao, args.figuras)
+        grafico_populacao_horizonte(resumo, versao, args.figuras)
+    if "v3" in versoes:
+        grafico_excesso_horizonte(resultados, args.figuras)
+    if "v4" in versoes:
+        aquecimento = experimento_aquecimento(
+            fontes["v4"], 20 if args.rapido else REPETICOES_AQUECIMENTO)
+        resumo_aquecimento = resumir(aquecimento, campo="aquecimento")
+        salvar_csv(args.saida / "aquecimento_v4.csv", aquecimento)
+        salvar_csv(args.saida / "resumo_aquecimento_v4.csv", resumo_aquecimento)
+        grafico_aquecimento(resumo_aquecimento, args.figuras)
+    if len(versoes) == 2:
+        grafico_comparacao(resultados, args.figuras)
+
+        # O artigo usa a V4 (corrigida) e as duas figuras que mostram a V3.
+        args.artigo.mkdir(parents=True, exist_ok=True)
+        for nome in FIGURAS_ARTIGO:
+            shutil.copy(args.figuras / f"{nome}.pdf", args.artigo / f"{nome}.pdf")
 
 
 if __name__ == "__main__":

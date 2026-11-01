@@ -40,3 +40,10 @@ desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
+# ---------- Claude Code ----------
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+
+# ---------- PDF gerado pelo editor (o entregável é artigo/artigo.pdf) ----------
+artigo/main.pdf
