@@ -1,5 +1,3 @@
-Não, traduzir os termos e trechos em inglês para o português **não altera** as instruções, a lógica nem os princípios do prompt; pelo contrário, torna o guia de reescrita mais coeso e aplicável diretamente a textos em português.
-
 A. Especificidade e rastreabilidade
 1. Parâmetros concretos com unidade e instrumento
 - Trecho: “O smartphone utilizado é um Motorola Moto g6 Plus.” / “O comprimento do tubo é medido, utilizando a fita métrica, como sendo 47,6 cm. O diâmetro interno... 7,5 cm.”
