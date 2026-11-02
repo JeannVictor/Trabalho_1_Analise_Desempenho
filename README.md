@@ -12,7 +12,7 @@ Professor: Flávio Barbieri Gonzaga
 |:---|:---|
 | [`artigo/artigo.pdf`](./artigo/artigo.pdf) | Artigo compilado, pronto para leitura |
 | [`artigo/main.tex`](./artigo/main.tex) | Fonte do artigo em LaTeX |
-| [`artigo/imagem/`](./artigo/imagem/) | Cópia das 7 figuras (PDF) usadas no `main.tex` |
+| [`artigo/imagem/`](./artigo/imagem/) | Cópia das 8 figuras (PDF) usadas no `main.tex` |
 | [`codigo/simulacao_v3.c`](./codigo/simulacao_v3.c) | Simulador original fornecido em sala |
 | [`codigo/simulacao_v3_testes.c`](./codigo/simulacao_v3_testes.c) | V3 com semente por parâmetro e saída em formato simples |
 | [`codigo/simulacao_v4.c`](./codigo/simulacao_v4.c) | V4: encerra em T, valida entradas, corrige ocupação; mede E[Nq], E[Wq], fila máxima e o tempo de cada cliente (média, P50, P95); aquecimento opcional |
@@ -130,23 +130,27 @@ echo "4.0 1.0 100.0 42" | ./simulacao_v4
 ### Saída esperada
 
 ```
-ocupacao=0.250...
-en=0.333...
-ew=1.333...
-erro_little=0.000...
-taxa_chegada=0.250...
-vazao=0.250...
+ocupacao=0.266535404094
+en=0.439964439083
+ew=1.833185162846
+erro_little=-0.000000000000
+taxa_chegada=0.240000000000
+vazao=0.240000000000
 fila_final=0
-tempo_final=100.000...
-enq=0.083...
-ewq=0.333...
-fila_maxima=...
-w_direto=1.333...
-w_p50=0.92...
-w_p95=3.99...
+tempo_final=100.000000000000
+enq=0.173429034989
+ewq=0.722620979122
+fila_maxima=4
+w_direto=1.833185162846
+w_p50=0.876387124116
+w_p95=6.310597995046
 ```
 
 As seis últimas linhas só aparecem na V4.
+
+Esses valores vêm de uma única execução curta (T=100, glibc 2.43), por isso se
+afastam da teoria para ρ=0,25 (ocupação 0,25, E[N]=0,333, E[W]=1,333). Como
+`rand()` depende da biblioteca C, outra biblioteca pode dar números diferentes.
 
 ### Significado dos campos
 
