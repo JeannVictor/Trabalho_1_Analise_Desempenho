@@ -81,7 +81,7 @@
 \vspace{0.3cm}
 
 \begin{resumoumacoluna}
-Este trabalho analisa um simulador a eventos discretos de uma fila M/M/1 implementado em linguagem C, relacionando seu funcionamento à notação de Kendall, à estabilidade e à Lei de Little. Foram avaliados oito cenários, com intensidades de tráfego entre 0,25 e 1,10, cinco horizontes (de $10^2$ a $10^6$) e 30 repetições por configuração, totalizando 1.200 execuções da versão original e 1.200 de uma versão corrigida. Os valores teóricos foram calculados antes das simulações e comparados às médias obtidas por meio de intervalos de confiança; também foram analisados a conservação do fluxo e as diferenças pareadas entre as versões. Nos cenários estáveis, para $T=10^6$, os erros relativos de $\EN$ e $\EW$ ficaram abaixo de 0,3\% até $\rho=0{,}90$ e entre 1,1\% e 1,7\% para $\rho=0{,}95$ e $\rho=0{,}99$; neste último cenário, horizontes de até $10^4$ subestimaram fortemente a teoria. A versão corrigida também passou a estimar $\ENq$, $\EWq$ e o comprimento máximo da fila, e ganhou um período de aquecimento opcional: com $\rho=0{,}99$ e janela de $10^4$, descartar os primeiros $10^5$ segundos elevou a estimativa de $\EN$ de 50\% para 97\% do valor teórico. Nos cenários crítico e sobrecarregado, observaram-se crescimento da população final e vazão próxima da capacidade do servidor. A versão original ultrapassou o horizonte solicitado, mas o efeito desse problema sobre as médias tornou-se desprezível nas execuções longas. Medindo o tempo de cada cliente, a Lei de Little foi confirmada de forma independente, e os percentis do tempo de permanência seguiram a distribuição exponencial prevista.
+Este trabalho analisa um simulador a eventos discretos de uma fila M/M/1 escrito em C e relaciona seu funcionamento à notação de Kendall, à condição de estabilidade e à Lei de Little. Foram simulados oito cenários, com intensidade de tráfego entre 0,25 e 1,10, cinco horizontes (de $10^2$ a $10^6$) e 30 repetições por configuração, o que dá 1.200 execuções da versão original e 1.200 de uma versão corrigida. Os valores teóricos foram calculados antes das simulações e comparados às médias por meio de intervalos de confiança; também foram verificados a conservação do fluxo e as diferenças pareadas entre as versões. Com $T=10^6$ nos cenários estáveis, os erros relativos de $\EN$ e $\EW$ ficaram abaixo de 0,3\% até $\rho=0{,}90$ e entre 1,1\% e 1,7\% para $\rho=0{,}95$ e $\rho=0{,}99$. Neste último, horizontes de até $10^4$ estimaram menos da metade do valor teórico. A versão corrigida passou a estimar também $\ENq$, $\EWq$ e o comprimento máximo da fila, e aceita um período de aquecimento opcional: com $\rho=0{,}99$ e janela de $10^4$, descartar os primeiros $10^5$ segundos elevou a estimativa de $\EN$ de 50\% para 97\% do valor teórico. Nos cenários crítico e sobrecarregado, a população final cresceu e a vazão ficou próxima da capacidade do servidor. A versão original ultrapassa o horizonte solicitado, mas isso só pesa nas execuções curtas. Com o tempo de cada cliente medido diretamente, $\EN$ e $\lambda W$ diferiram menos de 0,002\% em $T=10^6$, e os percentis do tempo de permanência seguiram a exponencial prevista.
 
 \vspace{\onelineskip}
 \noindent\textbf{Palavras-chave}: teoria de filas; simulação a eventos discretos; M/M/1; Lei de Little; análise de desempenho.
@@ -91,11 +91,13 @@ Este trabalho analisa um simulador a eventos discretos de uma fila M/M/1 impleme
 
 \section{Introdução}
 
-Servidores, roteadores, processadores e discos recebem solicitações que nem sempre podem ser atendidas na hora. Quando isso acontece, as solicitações esperam e formam uma fila. Estudar essas filas ajuda a entender como a carga afeta a utilização do recurso, a quantidade de solicitações presentes e o tempo que cada uma leva para ser concluída.
+Em servidores, roteadores, processadores e discos, uma solicitação às vezes chega com o recurso ocupado e precisa esperar. O que se quer saber é como a carga muda a utilização do recurso, o número de solicitações presentes e o tempo até cada uma ser concluída.
 
-Há duas formas complementares de fazer esse estudo. A teoria de filas fornece fórmulas fechadas para as medidas de desempenho, desde que certas hipóteses sejam satisfeitas. A simulação a eventos discretos reproduz a evolução do sistema no computador e permite observá-lo em qualquer condição. Um dos modelos clássicos é a fila M/M/1, com chegadas e atendimentos exponenciais e um único servidor (TRIVEDI, 2001). Comparar teoria e simulação também serve para encontrar erros de implementação (ROSS, 2006).
+A teoria de filas dá fórmulas fechadas para essas medidas, mas só quando certas hipóteses valem. A simulação a eventos discretos reproduz o sistema no computador e permite observá-lo mesmo fora dessas hipóteses. O caso clássico é a fila M/M/1, com chegadas e atendimentos exponenciais e um único servidor (TRIVEDI, 2001). Comparar as duas abordagens também ajuda a encontrar erros de implementação (ROSS, 2006).
 
-Este trabalho parte do arquivo \texttt{simulacao\_v3.c}, fornecido na disciplina. O programa gera chegadas e saídas, controla quantas solicitações estão no sistema e calcula a ocupação, o número médio de solicitações e o tempo médio de permanência. O objetivo é verificar em que condições os resultados da simulação se aproximam das previsões do modelo M/M/1. Para isso, foram variados a carga e a duração das execuções, e foram analisados a variabilidade entre repetições, a conservação do fluxo e os regimes crítico e sobrecarregado. Também foi criada uma versão corrigida (V4), que trata problemas de entrada e de encerramento da versão original (V3) e acrescenta medidas simples: o número e o tempo médio na fila de espera, o comprimento máximo da fila, o tempo de permanência de cada cliente e um período de aquecimento opcional. As duas versões foram comparadas.
+Essa comparação tem uma dificuldade prática. As fórmulas descrevem o regime estacionário, enquanto uma simulação dura um tempo finito e, no nosso caso, começa com o sistema vazio. Com o servidor ocupado 99\% do tempo, a teoria prevê 99 solicitações no sistema em média, e nossas execuções de $10^4$ segundos estimaram 47.
+
+Este trabalho parte do arquivo \texttt{simulacao\_v3.c}, fornecido na disciplina. O programa gera chegadas e saídas, controla quantas solicitações estão no sistema e calcula a ocupação, o número médio de solicitações e o tempo médio de permanência. A pergunta é em que condições esses resultados se aproximam das previsões do modelo M/M/1. Para respondê-la, variamos a carga e a duração das execuções e examinamos a variabilidade entre repetições, a conservação do fluxo e os regimes crítico e sobrecarregado. Criamos também uma versão corrigida (V4), que trata problemas de entrada e de encerramento da original (V3) e acrescenta o número e o tempo médio na fila de espera, o comprimento máximo da fila, o tempo de permanência de cada cliente e um período de aquecimento opcional. As duas versões foram comparadas.
 
 A seção 2 apresenta a fundamentação teórica; a seção 3 descreve o código e suas limitações; a seção 4 detalha o experimento; a seção 5 discute os resultados; e a seção 6 traz as considerações finais.
 
@@ -113,7 +115,7 @@ No modelo M/M/1, as chegadas formam um processo de Poisson de taxa $\lambda>0$. 
   \qquad k=0,1,2,\ldots
   \label{eq:poisson}
 \end{equation}
-O parâmetro $\lambda$ é o número médio de chegadas por unidade de tempo: com $\lambda=0{,}5$ solicitação por segundo, chega em média uma solicitação a cada dois segundos.
+O parâmetro $\lambda$ é o número médio de chegadas por unidade de tempo. Com $\lambda=0{,}5$ solicitação por segundo, chega em média uma solicitação a cada dois segundos.
 
 Os intervalos $X$ entre chegadas consecutivas são independentes e exponenciais de taxa $\lambda$:
 \begin{equation}
@@ -121,7 +123,7 @@ Os intervalos $X$ entre chegadas consecutivas são independentes e exponenciais 
   \qquad x\geq 0,
   \label{eq:exponencial-chegada}
 \end{equation}
-com média $\mathrm{E}[X]=1/\lambda$. Da mesma forma, o tempo de atendimento $S$ é exponencial de taxa $\mu$, com média $\mathrm{E}[S]=1/\mu$. A falta de memória da exponencial permite tratar o sistema como um processo markoviano (TRIVEDI, 2001; GONZAGA, 2026).
+com média $\mathrm{E}[X]=1/\lambda$. Da mesma forma, o tempo de atendimento $S$ é exponencial de taxa $\mu$, com média $\mathrm{E}[S]=1/\mu$. A exponencial não tem memória (o tempo que falta até o próximo evento não depende de quanto já se esperou), e isso permite tratar o sistema como um processo markoviano (TRIVEDI, 2001; GONZAGA, 2026).
 
 \subsection{Geração de variáveis pela transformada inversa}
 
@@ -134,9 +136,9 @@ O código usa $r=\lambda$ para a próxima chegada e $r=\mu$ para a duração do 
 
 \subsection{Notação de Kendall e modelo M/M/1}
 
-A notação de Kendall descreve uma fila na forma $A/S/c$: $A$ é a distribuição dos intervalos entre chegadas, $S$ a dos tempos de serviço e $c$ o número de servidores (KENDALL, 1953). Em M/M/1, os dois M indicam distribuições exponenciais e o 1 indica um único servidor.
+A notação proposta por David Kendall em 1953 descreve uma fila na forma $A/S/c$: $A$ é a distribuição dos intervalos entre chegadas, $S$ a dos tempos de serviço e $c$ o número de servidores (KENDALL, 1953). Em M/M/1, os dois M (de markoviano) indicam distribuições exponenciais e o 1 indica um único servidor.
 
-No código, os dois M correspondem às duas chamadas da transformada inversa (chegadas e saídas), e o servidor único aparece no fato de existir apenas um instante de saída agendado por vez. O programa não guarda as solicitações individualmente, mas, como atende uma de cada vez, o comportamento das medidas agregadas é o de uma fila atendida por ordem de chegada.
+No código, os dois M correspondem aos dois usos da transformada inversa (chegadas e saídas), e o servidor único aparece no fato de existir apenas um instante de saída agendado por vez. O programa não guarda as solicitações individualmente, mas atende uma de cada vez, e por isso as medidas agregadas são as de uma fila atendida por ordem de chegada.
 
 \subsection{Utilização e condição de estabilidade}
 
@@ -150,7 +152,7 @@ Em uma fila M/M/1 estável, $\rho$ é a fração do tempo em que o servidor est�
   \lambda<\mu \quad\Longleftrightarrow\quad \rho<1.
   \label{eq:estabilidade}
 \end{equation}
-Quanto mais $\rho$ se aproxima de 1, menor a folga do servidor e maiores a população, o tempo de permanência e a variabilidade. Para $\rho\geq1$ não há distribuição estacionária. No caso crítico ($\rho=1$), o sistema volta a ficar vazio de tempos em tempos, mas não se estabiliza; com $\rho>1$, a população cresce sem limite. Nesses casos, uma simulação de duração finita ainda produz números, mas eles dependem do horizonte e não são médias de equilíbrio (TRIVEDI, 2001).
+Quanto mais $\rho$ se aproxima de 1, menor a folga do servidor e maiores a população e o tempo de permanência. Para $\rho\geq1$ não há distribuição estacionária. No caso crítico ($\rho=1$), o sistema volta a ficar vazio de tempos em tempos, mas não se estabiliza; com $\rho>1$, a população cresce sem limite. Nesses casos, uma simulação de duração finita ainda produz números, que dependem do horizonte e não são médias de equilíbrio (TRIVEDI, 2001).
 
 \subsection{Medidas de desempenho do M/M/1}
 
@@ -167,23 +169,23 @@ Seja $N(t)$ o número de solicitações no sistema no instante $t$, incluindo a 
 \end{equation}
 As versões V3 e V4 estimam a ocupação, $L$ e $W$. A estimativa de $L$ é uma média no tempo; a de $W$ é indireta e inclui permanências cortadas no fim da execução (Seção~\ref{sec:ew}). A V4 também estima $L_q$, $W_q$ e os percentis de $W$ (Seção~\ref{sec:extensoes}).
 
-Além das médias, na M/M/1 com atendimento por ordem de chegada o tempo no sistema $W$ tem distribuição exponencial de taxa $\mu-\lambda$ (TRIVEDI, 2001). Assim, o percentil $p$ de $W$, isto é, o tempo que uma fração $p$ dos clientes não ultrapassa, é
+Na M/M/1 com atendimento por ordem de chegada, o tempo no sistema tem distribuição exponencial de taxa $\mu-\lambda$ (TRIVEDI, 2001). Assim, o percentil $p$ desse tempo, isto é, o valor que uma fração $p$ dos clientes não ultrapassa, é
 \begin{equation}
   w_p=\frac{-\ln(1-p)}{\mu-\lambda}.
   \label{eq:percentil}
 \end{equation}
-A mediana ($p=0{,}5$) vale cerca de 0,69 vez a média, e o percentil 95 vale cerca de 3 vezes a média.
+A mediana ($p=0{,}5$) vale $\ln 2\approx0{,}69$ vez a média, e o percentil 95 vale $\ln 20\approx3{,}00$ vezes a média.
 
 \subsection{Lei de Little}
 
-A Lei de Little relaciona o número médio de elementos em um sistema estável, a taxa com que eles passam pelo sistema e o tempo médio de permanência (LITTLE, 1961):
+A lei demonstrada por John Little em 1961 relaciona o número médio de elementos em um sistema estável, a taxa com que eles passam pelo sistema e o tempo médio de permanência (LITTLE, 1961):
 \begin{equation}
   L=\lambda_{\mathrm{ef}}W,
   \qquad
   L_q=\lambda_{\mathrm{ef}}W_q,
   \label{eq:little-sistema}
 \end{equation}
-em que $\lambda_{\mathrm{ef}}$ é a taxa efetiva de entrada. Sem perdas e em regime estável, $\lambda_{\mathrm{ef}}=\lambda$. Em palavras: o número médio de clientes presentes é igual ao número que chega por unidade de tempo vezes o tempo que cada um fica. A lei vale para qualquer distribuição, não só para a exponencial. No simulador, porém, $\EN$ e $\EW$ saem das mesmas áreas acumuladas, de modo que o resíduo de Little calculado pelo programa é praticamente zero por construção (Seção~\ref{sec:ew}). Por isso, a V4 também mede o tempo de cada cliente diretamente.
+em que $\lambda_{\mathrm{ef}}$ é a taxa efetiva de entrada. Sem perdas e em regime estável, $\lambda_{\mathrm{ef}}=\lambda$. Ou seja, o número médio de clientes presentes é igual ao número que chega por unidade de tempo vezes o tempo que cada um fica. A lei vale para qualquer distribuição. No simulador, $\EN$ e $\EW$ saem das mesmas áreas acumuladas, de modo que o resíduo de Little calculado pelo programa dá praticamente zero por construção (Seção~\ref{sec:ew}). Por isso, a V4 também mede o tempo de cada cliente diretamente.
 
 % ================================================================
 % 3 ANÁLISE DO CÓDIGO-FONTE
@@ -193,7 +195,7 @@ em que $\lambda_{\mathrm{ef}}$ é a taxa efetiva de entrada. Sem perdas e em reg
 
 \subsection{Visão geral}
 
-O arquivo \texttt{simulacao\_v3.c} é uma simulação a eventos discretos de uma fila com um servidor. O relógio não avança em passos fixos: ele salta direto para a próxima chegada ou saída, o que evita processar períodos em que nada muda (ROSS, 2006).
+O arquivo \texttt{simulacao\_v3.c} simula por eventos discretos uma fila com um servidor. O relógio salta direto para a próxima chegada ou saída, sem passos fixos, o que evita processar períodos em que nada muda (ROSS, 2006).
 
 O programa recebe o tempo médio entre chegadas, o tempo médio de atendimento e a duração da simulação. Durante a execução, mantém o relógio, o número de solicitações no sistema e os instantes da próxima chegada e da próxima saída. No final, imprime ocupação, $\EN$, $\EW$ e o resíduo de Little. Três estruturas do tipo \texttt{Info} acumulam áreas no tempo: uma para $N(t)$ e duas para os totais acumulados de chegadas e de saídas. Assim, as médias temporais são obtidas sem guardar o histórico do sistema. A Tabela~\ref{tab:mapeamento} relaciona as grandezas do modelo às variáveis do código.
 
@@ -222,9 +224,9 @@ O programa recebe o tempo médio entre chegadas, o tempo médio de atendimento e
 
 \subsection{Laço de eventos}
 
-A variável \texttt{fila} guarda a população total, e não só quem espera: zero significa servidor ocioso, um significa uma solicitação em atendimento e valores maiores indicam espera. Com o sistema vazio, o próximo evento só pode ser uma chegada; com o sistema ocupado, é o menor instante entre chegada e saída. Entre dois eventos, em $t_{i-1}$ e $t_i$, o estado não muda, e o intervalo $t_i-t_{i-1}$ é usado para atualizar as áreas.
+A variável \texttt{fila} guarda a população total, incluindo quem está em atendimento. Zero significa servidor ocioso, um significa uma solicitação em atendimento e valores maiores indicam espera. Com o sistema vazio, o próximo evento só pode ser uma chegada; com o sistema ocupado, é o menor instante entre chegada e saída. Entre dois eventos, em $t_{i-1}$ e $t_i$, o estado não muda, e o intervalo $t_i-t_{i-1}$ é usado para atualizar as áreas.
 
-Em uma chegada, a população e o contador de chegadas aumentam e a próxima chegada é sorteada. Se o servidor estava ocioso, o atendimento começa na hora e a saída é agendada. Em uma saída, a população diminui e o contador de saídas aumenta; se ainda houver alguém, o próximo atendimento começa e uma nova saída é agendada. Cada iteração do laço, portanto: (i) escolhe o próximo evento; (ii) acumula as áreas até ele; (iii) processa o evento e agenda os seguintes.
+Em uma chegada, a população e o contador de chegadas aumentam e a próxima chegada é sorteada. Se o servidor estava ocioso, o atendimento começa na hora e a saída é agendada. Em uma saída, a população diminui e o contador de saídas aumenta; se ainda houver alguém, o próximo atendimento começa e uma nova saída é agendada. Cada iteração do laço, portanto, (i) escolhe o próximo evento, (ii) acumula as áreas até ele e (iii) processa o evento e agenda os seguintes.
 
 Na V3, o evento escolhido é processado mesmo que ocorra depois do horizonte $T$. Na V4, o limite é verificado antes: se o próximo evento está depois de $T$, as áreas são fechadas em $T$ e o laço termina.
 
@@ -236,7 +238,7 @@ O número médio de solicitações é a área sob $N(t)$ dividida pelo tempo obs
 \begin{equation}
   \widehat{\EN}=\frac{1}{T_{\mathrm{obs}}}\sum_i N_{i-1}(t_i-t_{i-1}).
 \end{equation}
-Apesar do nome, \texttt{en.numero\_eventos} guarda a população atual: ele aumenta nas chegadas e diminui nas saídas.
+Apesar do nome, \texttt{en.numero\_eventos} guarda a população atual. Ele aumenta nas chegadas e diminui nas saídas.
 
 \subsection{Cálculo de \texorpdfstring{$\EW$}{E[W]} e resíduo de Little}
 \label{sec:ew}
@@ -255,32 +257,32 @@ O programa divide essa diferença de áreas pelo número de chegadas. Se $a_j$ e
   {A(T_{\mathrm{obs}})}.
   \label{eq:permanencia-truncada}
 \end{equation}
-Ou seja, quem ainda está no sistema no final contribui só com o tempo que ficou até $T_{\mathrm{obs}}$. Isso acontece nas duas versões. Em execuções longas de sistemas estáveis, essas poucas permanências cortadas pesam pouco na média.
+Ou seja, quem ainda está no sistema no final contribui só com o tempo que ficou até $T_{\mathrm{obs}}$. Isso acontece nas duas versões.
 
-Como $\widehat{\EW}=\int N\,dt/A(T_{\mathrm{obs}})$, $\widehat{\EN}=\int N\,dt/T_{\mathrm{obs}}$ e $\widehat{\lambda}=A(T_{\mathrm{obs}})/T_{\mathrm{obs}}$, o resíduo $\widehat{\EN}-\widehat{\lambda}\widehat{\EW}$ é zero por construção, a menos de arredondamento. Ele mostra que os acumuladores estão consistentes, mas não testa a Lei de Little de forma independente. Para isso, a V4 mede também o tempo de cada cliente (Seção~\ref{sec:extensoes}).
+Um exemplo pequeno mostra o que acontece com o resíduo de Little. Com $T_{\mathrm{obs}}=4$, considere um cliente que chega em 0 e sai em 3 e outro que chega em 1 e sairia em 5. A área sob $N(t)$ é $3+3=6$, porque o segundo cliente é cortado em 4. Daí $\widehat{\EW}=6/2=3$, $\widehat{\EN}=6/4=1{,}5$ e $\widehat{\lambda}=2/4=0{,}5$, e $\widehat{\lambda}\widehat{\EW}=1{,}5$ repete $\widehat{\EN}$. O mesmo vale para qualquer trajetória: como $\widehat{\EW}=\int N\,dt/A(T_{\mathrm{obs}})$, $\widehat{\EN}=\int N\,dt/T_{\mathrm{obs}}$ e $\widehat{\lambda}=A(T_{\mathrm{obs}})/T_{\mathrm{obs}}$, o resíduo $\widehat{\EN}-\widehat{\lambda}\widehat{\EW}$ é zero por construção, a menos de arredondamento. Ele mostra que os acumuladores estão consistentes e nada diz sobre a Lei de Little. Para testá-la, a V4 mede também o tempo de cada cliente (Seção~\ref{sec:extensoes}).
 
 \subsection{Versões utilizadas no experimento}
 
-O arquivo original foi mantido. Para as execuções em lote, foi criada a cópia \texttt{simulacao\_v3\_testes.c}, que recebe a semente pela entrada, valida as entradas e imprime as estatísticas em um formato simples, sem as mensagens de cada evento. A lógica dos eventos e os estimadores são os mesmos do original, inclusive o processamento além do horizonte e a soma antecipada dos atendimentos. Nos resultados, ``V3'' se refere a essa cópia.
+O arquivo original ficou intacto, mas não serve para rodar em lote. Ele imprime uma mensagem por evento e usa \texttt{time(NULL)} como semente, então execuções iniciadas no mesmo segundo repetem os mesmos sorteios. Repetições assim estreitariam o IC sem trazer informação nova. Por isso criamos a cópia \texttt{simulacao\_v3\_testes.c}, que recebe a semente pela entrada, valida as entradas e imprime só as estatísticas. A lógica dos eventos e os estimadores são os do original, inclusive o processamento além do horizonte e a soma antecipada dos atendimentos. Nos resultados, ``V3'' se refere a essa cópia.
 
-A \texttt{simulacao\_v4.c} mantém o mesmo modelo e as mesmas medidas. Duas de suas mudanças afetam os resultados: o encerramento exatamente em $T$, com as áreas fechadas nesse instante, e a contagem da ocupação apenas dentro da janela $[0,T]$. As demais, validação das entradas e proteção contra divisão por zero quando não há chegadas, só tornam o programa mais robusto. Como a cópia de testes da V3 também recebe a semente, as duas versões podem ser executadas com os mesmos números aleatórios, e a comparação entre elas mede apenas o efeito das duas correções.
+A \texttt{simulacao\_v4.c} mantém o mesmo modelo e as mesmas medidas. Duas de suas mudanças afetam os resultados: o encerramento exatamente em $T$, com as áreas fechadas nesse instante, e a contagem da ocupação apenas dentro da janela $[0,T]$. As outras duas, validação das entradas e proteção contra divisão por zero quando não há chegadas, não alteram nenhum número das execuções que fizemos. Como a cópia de testes da V3 também recebe a semente, rodamos as duas versões com os mesmos números aleatórios, e a diferença entre elas mede o efeito das duas correções.
 
-O script \texttt{experimentos\_mm1.py} não simula a fila: ele compila e executa os programas em C, organiza as saídas em CSV, calcula médias e intervalos de confiança e gera os gráficos.
+O script \texttt{experimentos\_mm1.py} compila e executa os programas em C, organiza as saídas em CSV, calcula médias e intervalos de confiança e gera os gráficos. A dinâmica da fila fica toda nos programas em C.
 
 \subsection{Extensões da V4}
 \label{sec:extensoes}
 
-A V4 ganhou três medidas que seguem o mesmo padrão de áreas do código original. A quantidade na fila de espera é $N_q(t)=\max(N(t)-1,0)$; sua área, dividida pelo tempo observado, dá $\widehat{\ENq}$, e dividida pelo número de chegadas dá $\widehat{\EWq}$. Como no caso de $\EW$, a relação $\widehat{\ENq}=\widehat{\lambda}\widehat{\EWq}$ vale por construção. A terceira medida é o comprimento máximo de $N(t)$ durante a observação.
+$\ENq$ e $\EWq$ seguem o mesmo padrão de áreas do código original. A quantidade na fila de espera é $N_q(t)=\max(N(t)-1,0)$; sua área, dividida pelo tempo observado, dá $\widehat{\ENq}$, e dividida pelo número de chegadas dá $\widehat{\EWq}$. Como no caso de $\EW$, a relação $\widehat{\ENq}=\widehat{\lambda}\widehat{\EWq}$ vale por construção. Acrescentamos também o comprimento máximo de $N(t)$ durante a observação.
 
-Para medir o tempo de cada cliente sem mudar a estrutura do programa, a V4 guarda os instantes de chegada numa lista, em ordem. Como o atendimento é por ordem de chegada, quem sai é sempre o primeiro da lista, e o seu tempo no sistema é o instante da saída menos o da chegada. Entram nessa conta apenas os clientes que chegaram e saíram dentro da janela observada. No final, o programa calcula a média desses tempos, chamada aqui de $W$ direto, e ordena a lista para obter a mediana (P50) e o percentil 95 (P95). Como esse $W$ não vem das áreas, a relação $\widehat{\EN}=\widehat{\lambda}\widehat{W}$ deixa de valer por construção e passa a ser um teste de verdade.
+Para medir o tempo de cada cliente, a V4 guarda os instantes de chegada numa lista, em ordem. Como o atendimento é por ordem de chegada, quem sai é sempre o primeiro da lista, e seu tempo no sistema é o instante da saída menos o da chegada. Só entram nessa conta os clientes que chegaram e saíram dentro da janela observada. No final, o programa calcula a média desses tempos, que chamamos de $W$ direto, e ordena a lista para obter a mediana (P50) e o percentil 95 (P95). Como esse $W$ não vem das áreas, a relação $\widehat{\EN}=\widehat{\lambda}\widehat{W}$ deixa de valer por construção e passa a ser um teste.
 
-A V4 também aceita um quinto valor de entrada, opcional: o tempo de aquecimento $T_a$. Quando a simulação passa de $T_a$, todas as áreas e contadores são zerados e a coleta recomeça, de modo que as medidas descrevem só a janela $[T_a,T]$. As solicitações já presentes nesse instante são contadas como chegadas da janela no acumulador de chegadas, para que a diferença entre as áreas de chegadas e saídas continue igual a $N(t)$, mas ficam fora do denominador de $\widehat{\EW}$ e $\widehat{\lambda}$. Sem o quinto valor, $T_a=0$, e as medidas originais saem idênticas às da V4 sem as extensões; isso foi conferido nas 1.200 execuções do experimento principal.
+A V4 também aceita um quinto valor de entrada, opcional: o tempo de aquecimento $T_a$. Quando a simulação passa de $T_a$, todas as áreas e contadores são zerados e a coleta recomeça, de modo que as medidas descrevem só a janela $[T_a,T]$. As solicitações já presentes nesse instante são contadas como chegadas da janela no acumulador de chegadas, para que a diferença entre as áreas de chegadas e saídas continue igual a $N(t)$, mas ficam fora do denominador de $\widehat{\EW}$ e $\widehat{\lambda}$. Sem o quinto valor, $T_a=0$ e a coleta começa no instante zero, como nas execuções do experimento principal.
 
 \subsection{Limitações}
 
-No experimento principal, as execuções começam com o sistema vazio e não descartam aquecimento; o efeito do descarte foi avaliado em um experimento separado. Na V3, o tempo de permanência só é obtido de forma indireta, com as permanências cortadas no fim; a V4 contorna isso medindo o tempo de cada cliente.
+No experimento principal, as execuções começam com o sistema vazio e não descartam aquecimento; avaliamos o efeito do descarte em um experimento separado (Seções~\ref{sec:met-aquecimento} e~\ref{sec:res-aquecimento}). Na V3, o tempo de permanência só é obtido de forma indireta, com as permanências cortadas no fim; a V4 contorna isso medindo o tempo de cada cliente.
 
-O gerador \texttt{rand()} produz inteiros em um conjunto finito, de modo que $U$ assume valores em uma grade, e não em um intervalo contínuo. Sua qualidade depende da biblioteca C utilizada. A aderência das amostras à exponencial não foi testada, mas a boa concordância com a teoria nos cenários estáveis não sugere problemas causados pelo gerador.
+Mantivemos o gerador \texttt{rand()} para preservar o código da disciplina. Ele produz inteiros em um conjunto finito: na glibc 2.43 que usamos, \texttt{RAND\_MAX} vale $2^{31}-1$, cerca de 2,1 bilhões de valores, de modo que $U$ assume valores em uma grade. Não testamos a aderência das amostras à exponencial. A concordância com a teoria nos cenários estáveis não aponta problema causado pelo gerador, mas também não o descarta.
 
 % ================================================================
 % 4 METODOLOGIA
@@ -290,7 +292,7 @@ O gerador \texttt{rand()} produz inteiros em um conjunto finito, de modo que $U$
 
 \subsection{Cenários e valores teóricos}
 
-A taxa de atendimento foi fixada em $\mu=1$ solicitação por segundo, e a carga foi controlada pela taxa de chegada. Com $\mu=1$, tem-se $\lambda=\rho$. Os cenários foram escolhidos para cobrir desde uma carga baixa até a saturação, com mais pontos perto de $\rho=1$, onde o comportamento muda mais rápido. Antes de simular, os valores teóricos de cada cenário estável foram calculados pelas Equações~\ref{eq:l-lq} e~\ref{eq:w-wq} (Tabela~\ref{tab:cenarios}). C7 ($\rho=1$) e C8 ($\rho=1{,}1$) não têm regime estacionário e foram incluídos para observar o que acontece quando a condição de estabilidade é violada.
+Fixamos a taxa de atendimento em $\mu=1$ solicitação por segundo e controlamos a carga pela taxa de chegada, de modo que $\lambda=\rho$. Escolhemos os cenários para ir de uma carga baixa até a saturação, com mais pontos perto de $\rho=1$, onde as medidas mudam mais rápido. Antes de simular, calculamos os valores teóricos de cada cenário estável pelas Equações~\ref{eq:l-lq} e~\ref{eq:w-wq} (Tabela~\ref{tab:cenarios}). C7 ($\rho=1$) e C8 ($\rho=1{,}1$) não têm regime estacionário e entraram para observarmos o que acontece quando a condição de estabilidade é violada.
 
 \begin{table}[htbp]
   \centering
@@ -315,41 +317,47 @@ A taxa de atendimento foi fixada em $\mu=1$ solicitação por segundo, e a carga
   \fonte{Elaboração própria.}
 \end{table}
 
-A tabela já mostra por que a região perto de $\rho=1$ é a mais delicada. O que determina o tempo no sistema é a folga do servidor, $1-\rho$, e não a carga em si: como $\EW=1/(\mu-\lambda)$, quando a folga cai de 0,10 ($\rho=0{,}90$) para 0,01 ($\rho=0{,}99$), $\EW$ fica dez vezes maior, passando de 10 para 100 segundos.
+A tabela mostra por que a região perto de $\rho=1$ é a mais delicada. Como $\EW=1/(\mu-\lambda)$, o tempo no sistema depende da folga do servidor, $1-\rho$. Quando a folga cai de 0,10 ($\rho=0{,}90$) para 0,01 ($\rho=0{,}99$), a carga sobe só 10\%, e $\EW$ passa de 10 para 100 segundos.
 
 \subsection{Horizontes, repetições e sementes}
 
-Uma simulação de duração finita só se aproxima da média de longo prazo, e essa aproximação melhora com a duração. Para observar esse efeito, cada cenário foi executado com cinco horizontes, de $T=10^2$ a $T=10^6$ segundos. O maior horizonte foi incluído por causa do cenário C6: o tempo que a fila leva para ``esquecer'' o estado inicial cresce com $(1-\rho)^{-2}$ (MORSE, 1955) e, de $\rho=0{,}90$ para $\rho=0{,}99$, fica cerca de cem vezes maior.
+Uma simulação de duração finita só se aproxima da média de longo prazo, e a aproximação melhora com a duração. Para observar isso, rodamos cada cenário com cinco horizontes, de $T=10^2$ a $T=10^6$ segundos. O horizonte de $10^6$ está aí por causa de C6, cujo IC de $\EN$ ainda tem semiamplitude de 20,6\% da média em $T=10^5$. Isso era esperado. Morse mostrou que o tempo de relaxação da fila, que é o tempo que ela leva para ``esquecer'' o estado inicial, cresce com $(1-\rho)^{-2}$ (MORSE, 1955). De $\rho=0{,}90$ para $\rho=0{,}99$, esse fator passa de 100 para 10.000.
 
-Cada combinação de cenário e horizonte foi repetida 30 vezes, com sementes diferentes. Como cada repetição é independente das outras, as 30 médias permitem estimar a incerteza do resultado por meio de um intervalo de confiança. No total, foram $8\times5\times30=1.200$ execuções por versão.
+Cada combinação de cenário e horizonte foi repetida 30 vezes, com sementes diferentes, e tratamos as repetições como independentes. Com isso, as 30 médias permitem estimar a incerteza por meio de um intervalo de confiança. Foram $8\times5\times30=1.200$ execuções por versão.
 
-As duas versões receberam exatamente as mesmas sementes. Como V3 e V4 sorteiam os números aleatórios na mesma ordem, cada par de execuções percorre a mesma trajetória até o horizonte, e qualquer diferença entre elas vem apenas das correções da V4. Todas essas execuções começaram com o sistema vazio.
+As duas versões receberam exatamente as mesmas sementes. Como V3 e V4 sorteiam os números aleatórios na mesma ordem, cada par de execuções percorre a mesma trajetória até o horizonte, e as diferenças vêm só das correções da V4. Já horizontes diferentes usam sementes diferentes, então os pontos de um gráfico de convergência não são prefixos de uma mesma trajetória. Todas essas execuções começaram com o sistema vazio.
 
 \subsection{Experimento de aquecimento}
+\label{sec:met-aquecimento}
 
-Como o sistema começa vazio, os primeiros instantes de cada execução não representam o regime estacionário. Uma forma de contornar isso é descartar um período inicial, chamado de aquecimento, e só depois começar a medir. Para avaliar esse efeito, a V4 foi executada em C4, C5 e C6 com uma janela de medição fixa de $10^4$ segundos, precedida de aquecimentos de 0, $10^3$, $10^4$ e $10^5$ segundos. A janela curta foi escolhida de propósito, porque é nela que o viés do início vazio aparece com mais força. Foram usadas 200 repetições por combinação: com 30, os resultados de C6 mudavam muito conforme o conjunto de sementes.
+Como o sistema começa vazio, os primeiros instantes de cada execução não representam o regime estacionário. Uma forma de contornar isso é descartar um período inicial, o aquecimento (do inglês \textit{warm-up}), e só depois começar a medir. Para avaliar o efeito, rodamos a V4 em C4, C5 e C6 com uma janela de medição fixa de $10^4$ segundos, precedida de aquecimentos de 0, $10^3$, $10^4$ e $10^5$ segundos. Escolhemos a janela curta de propósito, porque é nela que o viés do início vazio aparece com mais força.
+
+Os outros dois parâmetros também saem do experimento principal. Ficamos com C4, C5 e C6 porque, em $T=10^4$, o erro de $\EN$ neles foi de 5,0\%, 6,0\% e 53\%, contra no máximo 2,1\% nos demais cenários estáveis. E usamos 200 repetições porque, com 30, o IC de $\EN$ em C6 nesse horizonte tem semiamplitude de 21\% da média, larga demais para distinguir aquecimentos próximos; com 200, ela cai para 8,2\%.
 
 \subsection{Tratamento estatístico}
 
-Para cada conjunto de $R$ repetições, calculou-se a média e o intervalo de confiança (IC) de 95\% pela distribuição $t$ de Student:
+Para cada conjunto de $R$ repetições, calculamos a média e o intervalo de confiança (IC) de 95\% pela distribuição $t$ de Student:
 \begin{equation}
   \bar{x}\;\pm\;t_{0{,}975;R-1}\frac{s}{\sqrt{R}}.
   \label{eq:ic}
 \end{equation}
-O IC indica a faixa em que, com 95\% de confiança, está a média que o simulador produziria com infinitas repetições. Se o valor teórico cai dentro do IC, a diferença entre simulação e teoria pode ser explicada pela aleatoriedade; se cai fora, há indício de um erro sistemático. A distância até a teoria foi medida pelo erro relativo:
+O IC indica a faixa em que, com 95\% de confiança, está a média que o simulador produziria com infinitas repetições. Se o valor teórico cai dentro dele, a diferença pode ser explicada pela aleatoriedade. Se cai fora, pode ser acaso (esperamos 1 caso em 20) ou erro sistemático. A distância até a teoria foi medida pelo erro relativo:
 \begin{equation}
   \text{Erro (\%)}=
   100\left|\frac{\text{simulado}-\text{teórico}}{\text{teórico}}\right|.
   \label{eq:erro-relativo}
 \end{equation}
 
-Como os cenários têm escalas muito diferentes ($\EN$ vai de 0,33 a 99), várias figuras mostram a média dividida pelo valor teórico: um valor igual a 1 significa concordância exata. As figuras mostram apenas $\EN$ porque o simulador calcula $\widehat{\EW}=\widehat{\EN}/\widehat{\lambda}$ (Seção~\ref{sec:ew}), e por isso os erros de $\EW$ acompanham os de $\EN$.
+Como $\EN$ vai de 0,33 a 99 entre os cenários, algumas figuras mostram a média dividida pelo valor teórico, e 1 significa concordância exata. As figuras mostram só $\EN$, porque o simulador calcula $\widehat{\EW}=\widehat{\EN}/\widehat{\lambda}$ (Seção~\ref{sec:ew}) e os erros das duas medidas andam juntos: em $T=10^6$, diferem no máximo 0,03 ponto percentual. $\EW$ aparece nas tabelas.
 
-Na comparação entre versões, calculou-se a diferença V3$-$V4 em cada par de execuções com a mesma semente e aplicou-se o IC da Equação~\ref{eq:ic} a essas diferenças. Um IC que contém zero indica que as versões não se distinguem.
+Na comparação entre versões, calculamos a diferença V3$-$V4 em cada par de execuções com a mesma semente e aplicamos o IC da Equação~\ref{eq:ic} a essas diferenças. Um IC que contém zero indica que não detectamos diferença entre as versões.
 
 \subsection{Ambiente e reprodução}
+\label{sec:ambiente}
 
-Os simuladores foram compilados com GCC 15.2.0 (\texttt{-O2 -std=c11 -Wall -Wextra -lm}). O script \texttt{experimentos\_mm1.py} (Python 3.14.4, Matplotlib 3.10.7 e SciPy 1.16.3) executa todas as combinações, salva os CSVs e gera as figuras. Os códigos, os dados de cada execução e as instruções de reprodução estão em \url{https://github.com/JeannVictor/Trabalho_1_Analise_Desempenho}.
+Rodamos tudo em um computador com processador Intel Core i5-12450HX e cerca de 15~GB de memória, com Ubuntu 26.04 e glibc 2.43. Os simuladores foram compilados com GCC 15.2.0 (\texttt{-O2 -std=c11 -Wall -Wextra -lm}). O script \texttt{experimentos\_mm1.py} (Python 3.14.4, Matplotlib 3.10.7 e SciPy 1.16.3) executa todas as combinações, salva os CSVs e gera as figuras. Repetimos o lote completo, com as 2.400 execuções do experimento principal e as 2.400 do aquecimento, e os CSVs saíram idênticos, byte a byte. Como \texttt{rand()} depende da biblioteca C, quem rodar com outra biblioteca pode obter números diferentes.
+
+Os códigos, os dados de cada execução e as instruções de reprodução estão em \url{https://github.com/JeannVictor/Trabalho_1_Analise_Desempenho}. As figuras deste artigo vêm da V4, exceto as que comparam as versões; as equivalentes da V3 ficam na pasta \texttt{codigo/dados/figuras}.
 
 % ================================================================
 % 5 RESULTADOS E DISCUSSÃO
@@ -359,7 +367,7 @@ Os simuladores foram compilados com GCC 15.2.0 (\texttt{-O2 -std=c11 -Wall -Wext
 
 \subsection{Teoria e simulação}
 
-O primeiro objetivo era verificar se o simulador reproduz a teoria quando tem tempo suficiente. A Tabela~\ref{tab:resultados-estaveis} compara os valores teóricos com as médias de $T=10^6$. Nesse horizonte, V3 e V4 coincidem até a quarta casa decimal (Seção~\ref{sec:v3v4}), e por isso a tabela traz uma única média.
+Começamos verificando se o simulador reproduz a teoria quando tem tempo suficiente. A Tabela~\ref{tab:resultados-estaveis} compara os valores teóricos com as médias de $T=10^6$. Nesse horizonte, as médias de V3 e V4 coincidem até a quarta casa decimal (Seção~\ref{sec:v3v4}), e por isso a tabela traz uma só média.
 
 \begin{table*}[t]
   \centering
@@ -398,11 +406,11 @@ O primeiro objetivo era verificar se o simulador reproduz a teoria quando tem te
   \fonte{Elaboração própria.}
 \end{table*}
 
-O simulador reproduziu a teoria em todos os cenários estáveis. A ocupação teve erro abaixo de 0,1\% em todos eles. Para $\EN$ e $\EW$, o erro ficou abaixo de 0,3\% até $\rho=0{,}90$ e entre 1,1\% e 1,7\% em C5 e C6, e o valor teórico ficou dentro do IC em todos os casos. A única medida fora do IC foi a ocupação de C5, por uma margem pequena (0,9498 contra 0,95); com 18 intervalos de 95\%, espera-se cerca de um fora apenas por acaso.
+Consideramos que o simulador reproduziu a teoria nos seis cenários estáveis, pois o valor teórico de $\EN$ e $\EW$ ficou dentro do IC em todos eles. A ocupação teve erro de no máximo 0,084\% (C5). Em $\EN$ e $\EW$, o erro ficou abaixo de 0,3\% até $\rho=0{,}90$ e entre 1,1\% e 1,7\% em C5 e C6. O único IC sem a teoria foi o da ocupação de C5, [0,9486; 0,9498] contra 0,95; com 18 intervalos de 95\%, esperamos $18\times0{,}05=0{,}9$ fora por acaso.
 
-O erro é maior perto da saturação porque, nessa região, a fila passa longos períodos acumulada ou vazia, e uma execução contém poucos desses períodos. Por isso, as médias variam mais de uma execução para outra, e o IC fica mais largo. Foi também por esse motivo que o horizonte de $10^6$ se mostrou necessário: com $T=10^5$, o IC de $\EN$ em C4 não continha a teoria, e o de C6 tinha uma semiamplitude de 20\% da média, contra 6\% em $T=10^6$.
+Interpretamos o erro maior perto da saturação da seguinte forma: nessa região, a fila passa longos períodos acumulada ou vazia, e uma execução contém poucos desses períodos. As médias variam mais de uma execução para outra e o IC alarga. Foi o que nos levou a $T=10^6$. Com $T=10^5$, o IC de $\EN$ em C4, [8,59; 8,99], não continha 9, e o de C6 tinha semiamplitude de 20,6\% da média, contra 6,0\% em $T=10^6$. Como a incerteza de uma média temporal cai com $1/\sqrt{T}$, esperávamos uma redução de $\sqrt{10}\approx3{,}2$ vezes, e medimos entre 3,2 e 3,7 vezes em cinco cenários. Em C5 ela foi de só 1,9 vez, e não sabemos explicar essa diferença.
 
-A Figura~\ref{fig:teoria-simulacao} mostra a mesma comparação em forma de curva. Com $T=10^6$, todos os pontos ficam sobre a curva teórica. Com $T=10^4$, o ponto de $\rho=0{,}99$ fica bem abaixo dela, efeito explicado na seção seguinte.
+Na Figura~\ref{fig:teoria-simulacao}, a mesma comparação aparece em forma de curva. Com $T=10^6$, todos os pontos caem sobre a curva teórica; com $T=10^4$, o ponto de $\rho=0{,}99$ fica bem abaixo dela (46,8 contra 99), efeito que discutimos a seguir.
 
 \begin{figure}[htbp]
   \centering
@@ -415,7 +423,7 @@ A Figura~\ref{fig:teoria-simulacao} mostra a mesma comparação em forma de curv
 \subsection{Influência do horizonte de simulação}
 \label{sec:horizonte}
 
-A Figura~\ref{fig:convergencia} mostra como as estimativas mudam com o horizonte. Nas cargas baixas (C1 e C2), elas ficam perto da teoria desde os horizontes curtos. Nas cargas altas, os horizontes curtos ficam sistematicamente abaixo da teoria, e o efeito piora com $\rho$: em $T=10^2$, $\EN$ ficou em 61\% do valor teórico em C4, 27\% em C5 e apenas 6\% em C6.
+A Figura~\ref{fig:convergencia} mostra como as estimativas mudam com o horizonte. Em C1 e C2, $\EN$ oscila em torno da teoria desde os horizontes curtos, entre 0,95 e 1,05 vez o valor teórico. Nas cargas altas, os horizontes curtos ficam abaixo da teoria, e o efeito piora com $\rho$: em $T=10^2$, $\EN$ ficou em 61\% do valor teórico em C4, 27\% em C5 e 6\% em C6.
 
 \begin{figure}[htbp]
   \centering
@@ -425,13 +433,13 @@ A Figura~\ref{fig:convergencia} mostra como as estimativas mudam com o horizonte
   \fonte{Elaboração própria.}
 \end{figure}
 
-A causa é o início vazio. Em C6, a fila típica do regime estacionário tem 99 solicitações, mas a simulação começa com zero. Com o servidor ocupado, sai em média apenas 0,01 solicitação por segundo a mais do que entra, então a fila quase não tem tendência de subir nem de descer. Ela só chega ao nível típico por meio de flutuações aleatórias, o que leva muito tempo, e todo esse período de enchimento entra na média. Em C6, a estimativa chegou a 47\% da teoria em $T=10^4$ e só se aproximou dela a partir de $T=10^5$.
+Atribuímos isso ao início vazio. Em C6, a fila típica do regime estacionário tem 99 solicitações, e a simulação começa com zero. Com o servidor ocupado, sai em média só 0,01 solicitação por segundo a mais do que entra, então a fila quase não tem tendência de subir nem de descer. Ela chega ao nível típico por flutuações aleatórias, o que demora, e todo esse período de enchimento entra na média. Em C6, a estimativa estava em 47\% da teoria em $T=10^4$ e chegou a 98\% em $T=10^5$.
 
-Esse erro é um viés, e não uma flutuação aleatória: mais repetições estreitariam o IC em torno do valor errado, sem corrigi-lo. A duração necessária, portanto, depende da carga, e um horizonte suficiente para $\rho=0{,}75$ pode ser muito curto para $\rho=0{,}99$.
+O desvio apareceu nos dois experimentos que medem essa configuração, com sementes diferentes. Sem aquecimento e com janela de $10^4$ segundos, C6 deu 47\% com 30 repetições, IC [0,37; 0,57], e 50\% com 200 repetições, IC [0,46; 0,54]. O IC estreitou e continuou longe de 1, então aumentar as repetições não corrige esse erro. A duração necessária, portanto, depende da carga: em $T=10^4$, o erro de $\EN$ foi de 2,1\% em C3 e de 53\% em C6.
 
 \subsection{Variabilidade entre repetições}
 
-O IC descreve a incerteza da média de 30 execuções. Para saber quanto uma execução isolada pode errar, a Figura~\ref{fig:boxplots} mostra a distribuição das 30 estimativas de $\EN$ com $T=10^6$.
+O IC descreve a incerteza da média de 30 execuções. Para saber quanto uma execução isolada pode errar, a Figura~\ref{fig:boxplots} mostra as 30 estimativas de $\EN$ com $T=10^6$.
 
 \begin{figure}[htbp]
   \centering
@@ -441,11 +449,11 @@ O IC descreve a incerteza da média de 30 execuções. Para saber quanto uma exe
   \fonte{Elaboração própria.}
 \end{figure}
 
-De C1 a C4, todas as execuções ficaram a menos de 4\% da teoria. Em C5, a variação chegou a cerca de 10\% e, em C6, as estimativas foram de 0,71 a 1,36 vez o valor teórico. Assim, mesmo com um milhão de segundos simulados, uma única execução com $\rho=0{,}99$ pode errar $\EN$ em mais de 30\%. Perto da saturação, conclusões confiáveis exigem várias repetições.
+De C1 a C4, todas as execuções ficaram a menos de 4\% da teoria. Em C5, a variação chegou a cerca de 10\% e, em C6, as estimativas foram de 0,71 a 1,36 vez o valor teórico. Ou seja, mesmo com um milhão de segundos simulados, cerca de 990 mil chegadas, uma única execução com $\rho=0{,}99$ pode errar $\EN$ em mais de 30\%. Nesse cenário, uma execução só não basta.
 
 \subsection{Vazão e verificações de consistência}
 
-Um servidor não consegue atender mais do que $\mu$ solicitações por segundo. A vazão de longo prazo é, portanto, $\min(\lambda,\mu)$: igual à taxa de chegada quando o sistema é estável e igual à capacidade quando ele está sobrecarregado. A Figura~\ref{fig:fluxo} confirma isso. Em C8, chegaram em média 1,1001 solicitações por segundo e saíram 0,9998; a diferença se acumula na fila.
+Um servidor não atende mais do que $\mu$ solicitações por segundo, então a vazão de longo prazo é $\min(\lambda,\mu)$. Na Figura~\ref{fig:fluxo}, a vazão acompanha $\lambda$ até $\rho=1$ e depois fica presa em 1. Em C8, com $\lambda$ configurado em 1,10, chegaram em média 1,1001 solicitações por segundo e saíram 0,9998; a diferença, de cerca de 0,10, se acumula na fila.
 
 \begin{figure}[htbp]
   \centering
@@ -460,7 +468,7 @@ Como as execuções começam vazias, o número de solicitações no final deve s
   (\widehat{\lambda}-\widehat{v})\,T_{\mathrm{obs}}=A(T_{\mathrm{obs}})-D(T_{\mathrm{obs}})=N(T_{\mathrm{obs}}),
   \label{eq:conservacao-fluxo}
 \end{equation}
-em que $\widehat{v}$ é a vazão observada. Essa igualdade valeu nas 2.400 execuções, com diferença máxima abaixo de $10^{-6}$, que vem apenas do arredondamento das saídas. Ela confirma que nenhuma solicitação foi criada ou perdida pelo código. Já o resíduo de Little calculado pelas áreas ficou abaixo de $6\times10^{-8}$, mas, como explicado na Seção~\ref{sec:ew}, ele é nulo por construção e não acrescenta evidência. A verificação independente da lei é feita na Seção~\ref{sec:little-direto}.
+em que $\widehat{v}$ é a vazão observada. Conferimos a igualdade nas 2.400 execuções. A maior diferença ficou abaixo de $10^{-6}$ solicitação, compatível com o arredondamento, já que as taxas são impressas com 12 casas decimais e multiplicadas por até $10^6$. Logo, o código não criou nem perdeu solicitações. O resíduo de Little calculado pelas áreas ficou abaixo de $6\times10^{-8}$, mas, como vimos na Seção~\ref{sec:ew}, ele é nulo por construção e não serve de evidência. A verificação independente da lei está na Seção~\ref{sec:little-direto}.
 
 \subsection{Cenários crítico e sobrecarregado}
 
@@ -474,19 +482,16 @@ A Figura~\ref{fig:populacao-final} mostra o que acontece com a população final
   \fonte{Elaboração própria.}
 \end{figure}
 
-Os três cenários têm comportamentos diferentes, e cada um segue sua previsão:
-\begin{itemize}
-  \item \textbf{C6} ($\rho=0{,}99$): a população para de crescer e se estabiliza em torno de $\EN=99$, como esperado de um sistema estável.
-  \item \textbf{C8} ($\rho=1{,}1$): chegam 0,1 solicitação por segundo a mais do que o servidor consegue atender, e esse excesso se acumula. A população cresce linearmente, segundo $(\lambda-\mu)T$, e chegou a 100.250 em $T=10^6$, contra 100.000 previstos.
-  \item \textbf{C7} ($\rho=1$): em média, entra o mesmo número de solicitações que sai, então não há acúmulo sistemático. A população, porém, se comporta como um passeio aleatório: ela sobe e desce ao acaso e, como não há folga para trazê-la de volta, vai se afastando de zero. Esse afastamento cresce com a raiz do tempo, na média $\sqrt{4T/\pi}\approx1{,}13\sqrt{T}$. Os valores observados ficaram entre $1{,}2\sqrt{T}$ e $1{,}3\sqrt{T}$, compatíveis com a previsão dentro da incerteza das 30 repetições.
-\end{itemize}
+Os três cenários se comportam de maneiras diferentes. Em C6, a população para de crescer perto de $\EN=99$: em $T=10^5$ e $T=10^6$, a média ficou em 115 e 118, com ICs ([74; 157] e [76; 159]) que contêm 99. Em C8, chegam 0,1 solicitação por segundo a mais do que o servidor atende, e o excesso se acumula. A previsão é $(\lambda-\mu)T$, e em $T=10^6$ medimos 100.250 contra 100.000, diferença de 0,25\%. A reta só falha em $T=10^2$ (21 contra 10), o que interpretamos como efeito das flutuações, que nessa escala ainda pesam mais que o acúmulo.
 
-Nos cenários C7 e C8, a população não se estabiliza, então as médias de $\EN$ e $\EW$ dependem do horizonte e não representam um regime de equilíbrio.
+Em C7, entra em média o mesmo número de solicitações que sai, então não há acúmulo sistemático. Aproximamos a população por um passeio aleatório refletido em zero, o que basta para o nosso propósito: ela sobe e desce ao acaso e nada a puxa de volta. Com variância $\lambda+\mu=2$ por unidade de tempo, a média do módulo é $\sqrt{2\cdot2T/\pi}=\sqrt{4T/\pi}\approx1{,}13\sqrt{T}$. A razão entre a população final e $\sqrt{T}$ ficou entre 1,19 e 1,32, sempre acima de 1,13, mas a previsão ficou dentro do IC nos cinco horizontes. Em $T=10^6$, são 1.128 previstos contra 1.319 medidos, com IC [992; 1.647]. Com 30 repetições, não dá para dizer se essa diferença é só acaso.
+
+Em C7 e C8, a população não se estabiliza, então as médias de $\EN$ e $\EW$ dependem do horizonte. Em C8, por exemplo, $\EN$ passou de 5.075 em $T=10^5$ para 50.101 em $T=10^6$.
 
 \subsection{Comparação entre V3 e V4}
 \label{sec:v3v4}
 
-A V3 só encerra depois de processar o primeiro evento posterior ao horizonte, então o seu tempo final sempre passa de $T$. A falta de memória da exponencial permite prever esse excesso: se o servidor está ocioso em $T$, o próximo evento só pode ser uma chegada, que demora em média $1/\lambda$; se está ocupado, ele pode ser uma chegada ou uma saída, e demora em média $1/(\lambda+\mu)$. Ponderando pela ocupação, o excesso médio é $(1-\rho)/\lambda+\rho/(\lambda+\mu)$. Como esse valor não depende de $T$, os cinco horizontes foram reunidos na Figura~\ref{fig:excesso-horizonte}.
+A V3 só encerra depois de processar o primeiro evento posterior ao horizonte, então seu tempo final sempre passa de $T$. A falta de memória da exponencial permite prever esse excesso. Se o servidor está ocioso em $T$, o próximo evento só pode ser uma chegada, que demora em média $1/\lambda$. Se está ocupado, pode ser uma chegada ou uma saída, e demora em média $1/(\lambda+\mu)$. Ponderando pela ocupação, o excesso médio é $(1-\rho)/\lambda+\rho/(\lambda+\mu)$; com $\rho\geq1$, o servidor fica sempre ocupado e sobra $1/(\lambda+\mu)$. Em C1, isso dá $0{,}75/0{,}25+0{,}25/1{,}25=3{,}2$~s. Como o valor não depende de $T$, reunimos os cinco horizontes na Figura~\ref{fig:excesso-horizonte}, com 150 execuções por cenário.
 
 \begin{figure}[htbp]
   \centering
@@ -496,7 +501,7 @@ A V3 só encerra depois de processar o primeiro evento posterior ao horizonte, e
   \fonte{Elaboração própria.}
 \end{figure}
 
-As médias seguem a previsão: cerca de 3,2 segundos em C1, onde o servidor fica ocioso na maior parte do tempo, e cerca de 0,5 segundo nas cargas altas. Como o excesso tem tamanho fixo, o seu peso diminui à medida que o horizonte cresce.
+Medimos 3,21~s em C1, contra 3,20~s previstos, e entre 0,45 e 0,69~s de C4 a C8, contra 0,48 a 0,58~s. O ponto que mais se afastou foi C2, com 1,07~s contra 1,33~s e IC [0,89; 1,25]. Foi o único dos oito intervalos sem a previsão; esperávamos $8\times0{,}05=0{,}4$ fora por acaso, e os dados não permitem dizer se é isso. Como o excesso tem tamanho fixo, seu peso cai com o horizonte: em C1, foi de 3,6\% de $T$ em $T=10^2$ e de 0,0004\% em $T=10^6$.
 
 \begin{figure}[htbp]
   \centering
@@ -506,13 +511,13 @@ As médias seguem a previsão: cerca de 3,2 segundos em C1, onde o servidor fica
   \fonte{Elaboração própria.}
 \end{figure}
 
-A Figura~\ref{fig:comparacao-versoes} mostra o efeito disso sobre as medidas. Em $T=10^2$, a ocupação da V3 foi maior que a da V4 em todos os cenários, em até 0,012. O motivo é que a V3 soma a duração de cada atendimento no momento em que ele começa, inclusive a parte que termina depois de $T$. Em $\EN$, as diferenças não têm um sinal definido e ficaram, em média, em 1,2\% em $T=10^2$. A partir de $T=10^4$, as duas versões praticamente coincidem: a diferença em $\EN$ fica abaixo de 0,03\%.
+A Figura~\ref{fig:comparacao-versoes} mostra o efeito sobre as medidas. Em $T=10^2$, a ocupação média da V3 foi maior que a da V4 em todos os cenários, em até 0,012, porque a V3 soma a duração de cada atendimento no momento em que ele começa, inclusive a parte que termina depois de $T$. Em $\EN$, as diferenças não têm sinal definido e ficaram, em média, em 1,2\% em $T=10^2$. A partir de $T=10^4$, ficam abaixo de 0,03\%.
 
-A lógica central da V3 está correta, e seus problemas estão apenas na fronteira da janela de observação, onde só pesam nas execuções curtas. A V4 é preferível por medir exatamente o intervalo $[0,T]$, mas, nos horizontes usados para comparar com a teoria, as duas versões levam às mesmas conclusões.
+Concluímos que a lógica central da V3 está correta, pois as duas versões percorrem a mesma trajetória até $T$ e suas médias em $T=10^6$ coincidem até a quarta casa. Seus problemas estão na fronteira da janela de observação e só pesam nas execuções curtas. Preferimos a V4 por medir exatamente o intervalo $[0,T]$.
 
 \subsection{Medidas adicionais da V4}
 
-As próximas três seções tratam do que só a V4 mede. A Tabela~\ref{tab:extras} traz a fila de espera e o comprimento máximo da fila.
+Este subitem e os dois seguintes tratam do que só a V4 mede. A Tabela~\ref{tab:extras} traz a fila de espera e o comprimento máximo da fila.
 
 \begin{table*}[t]
   \centering
@@ -536,14 +541,14 @@ As próximas três seções tratam do que só a V4 mede. A Tabela~\ref{tab:extra
   \fonte{Elaboração própria.}
 \end{table*}
 
-$\ENq$ e $\EWq$ seguiram a teoria com a mesma precisão de $\EN$, e a teoria ficou dentro do IC em todos os cenários. Isso era esperado: sempre que o servidor está ocupado, $N(t)=N_q(t)+1$, e a ocupação é estimada com erro abaixo de 0,1\%, de modo que os erros da fila de espera são praticamente os mesmos do sistema completo.
+Os erros de $\ENq$ e $\EWq$ ficaram próximos aos de $\EN$ (em C5, 1,745\% e 1,716\%, contra 1,662\%), e a teoria ficou dentro do IC nos seis cenários. Era o esperado, já que $N(t)=N_q(t)+1$ sempre que o servidor está ocupado e a ocupação tem erro abaixo de 0,1\%.
 
-O comprimento máximo da fila se comporta de outro jeito: ele não converge, mas cresce com a duração da simulação. Quanto mais longa a observação, maior a chance de ocorrer um congestionamento raro. O máximo também fica muito acima da média: em C3, onde $\EN=3$, a fila chegou em média a 39 solicitações em $T=10^6$. Por isso, o máximo só tem significado junto com a duração da observação, e dimensionar um sistema pela média subestimaria os seus picos.
+O comprimento máximo da fila cresce com a duração da simulação. Em C3, foi de 23,0 em $T=10^4$ para 38,7 em $T=10^6$; em C6, de 130,4 para 533,8. Quanto mais longa a observação, maior a chance de ocorrer um congestionamento raro. O máximo também fica muito acima da média: em C3, onde $\EN=3$, a fila chegou em média a 39 solicitações, 13 vezes a média. Então o máximo só faz sentido junto com a duração da observação, e dimensionar um sistema pela média subestimaria os seus picos.
 
 \subsection{Lei de Little com tempos individuais e percentis}
 \label{sec:little-direto}
 
-Até aqui, a Lei de Little não pôde ser testada, porque o resíduo calculado a partir das áreas é zero de qualquer forma. Com o tempo de cada cliente medido diretamente, a situação muda: $\widehat{\EN}$ continua vindo da área sob $N(t)$, mas $W$ passa a ser a média dos tempos que cada cliente realmente passou no sistema. Se as duas medidas estiverem corretas, $\widehat{\lambda}\,\widehat{W}$ deve reproduzir $\widehat{\EN}$. A Tabela~\ref{tab:little-direto} mostra o resultado.
+Até aqui, não pudemos testar a Lei de Little, porque o resíduo calculado a partir das áreas é zero de qualquer forma. Com o tempo de cada cliente medido diretamente, $\widehat{\EN}$ continua vindo da área sob $N(t)$, e $W$ passa a ser a média dos tempos que cada cliente realmente passou no sistema. Se as duas medidas estiverem corretas, $\widehat{\lambda}\,\widehat{W}$ deve reproduzir $\widehat{\EN}$. A Tabela~\ref{tab:little-direto} mostra o resultado.
 
 \begin{table*}[t]
   \centering
@@ -567,13 +572,14 @@ Até aqui, a Lei de Little não pôde ser testada, porque o resíduo calculado a
   \fonte{Elaboração própria.}
 \end{table*}
 
-A lei se confirmou. Em $T=10^6$, a diferença entre $\widehat{\EN}$ e $\widehat{\lambda}\,\widehat{W}$ ficou abaixo de 0,002\% em todos os cenários estáveis. Em $T=10^2$ ela chegava a 2\%, e isso também era esperado: os clientes que ainda estão no sistema no fim da execução entram na área sob $N(t)$, mas não na média dos tempos individuais, e numa janela curta eles pesam mais. Quanto mais longa a janela, menor o peso dessa borda. O $W$ direto também ficou praticamente igual ao indireto em $T=10^6$, com diferença máxima de 0,001 em C6, o que mostra que o corte das permanências no fim da execução (Seção~\ref{sec:ew}) não afetou os resultados dos horizontes longos.
+Em $T=10^6$, a diferença entre $\widehat{\EN}$ e $\widehat{\lambda}\,\widehat{W}$ ficou abaixo de 0,002\% nos seis cenários estáveis, o que confirma a lei com uma medida que não depende das áreas de chegadas e saídas. Em $T=10^2$ ela chegava a 2\%. Essa diferença vem da borda da janela: os clientes que ainda estão no sistema no fim da execução entram na área sob $N(t)$, mas não na média dos tempos individuais, e numa janela curta eles pesam mais. O $W$ direto também ficou praticamente igual ao indireto em $T=10^6$ (diferença máxima de 0,001~s em 98,9~s, em C6), então o corte das permanências no fim da execução (Seção~\ref{sec:ew}) não afetou os horizontes longos.
 
-Os percentis mostram algo que a média esconde. Os valores simulados seguiram a distribuição exponencial prevista pela Equação~\ref{eq:percentil}: o P50 ficou a menos de 2\% da teoria e o P95 a menos de 3\%, com a teoria dentro do IC em quase todos os casos (a exceção foi o P50 de C5, a 2\% da teoria). Em C4, por exemplo, o tempo médio no sistema é de 10 segundos, mas metade dos clientes fica menos de 7 segundos e um em cada vinte fica mais de 30. Assim como a fila máxima, os percentis mostram que avaliar um sistema só pela média esconde a experiência de quem mais espera.
+Nos percentis, os valores simulados seguiram a exponencial prevista pela Equação~\ref{eq:percentil}. O P50 ficou a menos de 2\% da teoria e o P95 a menos de 3\%, com a teoria dentro do IC em 11 dos 12 casos. A exceção foi o P50 de C5, com 13,59~s contra 13,86~s e IC [13,41; 13,77]. C5 é o mesmo cenário em que a ocupação ficou fora do IC; as duas medidas vêm das mesmas 30 execuções e podem ter a mesma origem. Em C4, o tempo médio no sistema é de 10~s, metade dos clientes fica menos de 7~s e um em cada vinte fica mais de 30~s: o P95 previsto é $\ln 20/0{,}1=29{,}96$~s, e medimos 30,13~s, diferença de 0,6\%. A média sozinha não mostra esses 5\%.
 
 \subsection{Efeito do aquecimento}
+\label{sec:res-aquecimento}
 
-Na Seção~\ref{sec:horizonte}, o início vazio fez os horizontes curtos subestimarem a teoria. Se essa é mesmo a causa, descartar o período inicial deve resolver o problema. A Figura~\ref{fig:aquecimento} mostra o resultado do experimento de aquecimento.
+Na Seção~\ref{sec:horizonte}, atribuímos ao início vazio o fato de os horizontes curtos subestimarem a teoria. Se essa é a causa, descartar o período inicial deve resolver o problema. A Figura~\ref{fig:aquecimento} mostra o teste.
 
 \begin{figure}[htbp]
   \centering
@@ -583,9 +589,9 @@ Na Seção~\ref{sec:horizonte}, o início vazio fez os horizontes curtos subesti
   \fonte{Elaboração própria.}
 \end{figure}
 
-Em C6, sem aquecimento, a janela de $10^4$ segundos estimou 50\% do valor teórico. Descartando $10^3$, $10^4$ e $10^5$ segundos, a estimativa subiu para 63\%, 81\% e 97\%, e só no último caso o IC passou a conter a teoria. Em C5, o pequeno viés sem aquecimento (94\%) desapareceu com qualquer descarte, e em C4 a janela de $10^4$ segundos já era suficiente.
+Em C6, sem aquecimento, a janela de $10^4$ segundos estimou 50\% do valor teórico. Descartando $10^3$, $10^4$ e $10^5$ segundos, a estimativa subiu para 63\%, 80\% e 97\%, e só no último caso o IC, [0,85; 1,09], passou a conter a teoria. Nesse caso, cada execução simulou $1{,}1\times10^5$ segundos para aproveitar $10^4$. Em C5, a estimativa sem aquecimento ficou em 94\%, com IC [0,89; 0,98], e passou a conter a teoria com qualquer um dos descartes. Em C4, ela já continha a teoria sem aquecimento (99\%). O único IC fora nesse cenário foi o do aquecimento de $10^3$ segundos (97\%), que tratamos como acaso, porque os descartes maiores voltaram a conter a teoria.
 
-O aquecimento remove o viés, mas não reduz a incerteza. Em C6, a semiamplitude do IC passou de 8\% para 12\% da média, porque a janela deixa de começar sempre do mesmo estado (vazio) e passa a começar de estados variados, típicos do regime estacionário. Nas cargas muito altas, portanto, o aquecimento precisa ser combinado com uma janela de medição longa.
+O descarte aproximou a estimativa da teoria e alargou o IC: em C6, a semiamplitude passou de 8,2\% para 12,5\% da média. Nossa leitura é que a janela deixa de começar sempre do mesmo estado (vazio) e passa a começar de estados variados, típicos do regime estacionário. Nas cargas muito altas, portanto, o aquecimento precisa vir junto com uma janela de medição longa.
 
 % ================================================================
 % 6 CONSIDERAÇÕES FINAIS
@@ -593,15 +599,15 @@ O aquecimento remove o viés, mas não reduz a incerteza. Em C6, a semiamplitude
 
 \section{Considerações finais}
 
-O objetivo deste trabalho era verificar em que condições o simulador da disciplina reproduz o modelo M/M/1. A resposta é que ele o reproduz bem em todos os cenários estáveis, desde que a simulação dure o suficiente. Com $T=10^6$, os erros de $\EN$ e $\EW$ ficaram abaixo de 0,3\% até $\rho=0{,}90$ e abaixo de 2\% em $\rho=0{,}95$ e $0{,}99$, sempre com a teoria dentro do intervalo de confiança. A vazão seguiu $\min(\lambda,\mu)$, e a conservação do fluxo foi respeitada em todas as execuções.
+Queríamos saber em que condições o simulador da disciplina reproduz o modelo M/M/1. Nos seis cenários estáveis, ele reproduziu, desde que a simulação dure o suficiente: com $T=10^6$, os erros de $\EN$ e $\EW$ ficaram abaixo de 0,3\% até $\rho=0{,}90$ e abaixo de 2\% em $\rho=0{,}95$ e $0{,}99$, com a teoria dentro do intervalo de confiança em todos os casos. A vazão seguiu $\min(\lambda,\mu)$, e a conservação do fluxo valeu nas 2.400 execuções.
 
-O ponto central, porém, é o quanto essa duração depende da carga. Como a simulação começa com o sistema vazio, o período de enchimento da fila puxa as médias para baixo, e esse efeito cresce muito perto da saturação: com $\rho=0{,}99$, mesmo $T=10^4$ estimou menos da metade do valor teórico, enquanto com $\rho=0{,}25$ um horizonte de $10^2$ já ficava próximo da teoria. Descartar um período de aquecimento corrige esse viés, mas não diminui a variação entre execuções, que nessa carga continua alta. Na prática, quanto mais perto de $\rho=1$, mais longas e mais numerosas precisam ser as execuções para que o resultado seja confiável.
+Essa duração depende muito da carga. Como a simulação começa com o sistema vazio, o enchimento da fila puxa as médias para baixo: com $T=10^4$, o erro de $\EN$ foi de 2,1\% em $\rho=0{,}75$ e de 53\% em $\rho=0{,}99$. Descartar $10^5$ segundos de aquecimento levou a estimativa de $\rho=0{,}99$ de 50\% para 97\% da teoria, com um IC mais largo (de 8,2\% para 12,5\% da média). Para quem for simular perto de $\rho=1$, sugerimos não confiar em uma execução só e conferir se a estimativa ainda muda quando o horizonte aumenta dez vezes. Em $\rho=0{,}99$, ela foi de 47\% em $T=10^4$ para 98\% em $T=10^5$ e 99\% em $T=10^6$.
 
-Quando $\rho\geq1$, os resultados confirmam que não há regime estacionário: no caso crítico a fila cresceu com a raiz do tempo e, no sobrecarregado, linearmente, com a vazão presa à capacidade do servidor. Nesses casos, as médias simuladas só descrevem a janela observada e não podem ser comparadas com as fórmulas de regime estacionário.
+Quando $\rho\geq1$, a fila não se estabilizou. No caso crítico, a população cresceu com a raiz do tempo (de 1,19 a 1,32 vez $\sqrt{T}$, contra 1,13 previstos, com a previsão dentro do IC nos cinco horizontes). No sobrecarregado, cresceu linearmente (100.250 contra 100.000 em $T=10^6$), com a vazão presa em 0,9998. Nesses casos, as médias simuladas só descrevem a janela observada e não podem ser comparadas com as fórmulas de regime estacionário.
 
-A comparação entre as versões mostrou que a lógica da V3 está correta. Seus problemas, o tempo final que passa do horizonte e a ocupação contada antes da hora, só alteram os resultados nas execuções curtas e desaparecem a partir de $T=10^4$. A V4 corrige essas falhas e, com as extensões, permitiu ir além das médias. A fila de espera seguiu a teoria com a mesma precisão do sistema completo, a Lei de Little foi confirmada com tempos medidos cliente a cliente, e os percentis e a fila máxima mostraram que a média esconde os piores casos: em C4, o tempo médio no sistema é de 10 segundos, mas um em cada vinte clientes fica mais de 30.
+A comparação entre as versões mostrou que a lógica da V3 está correta. O tempo final que passa do horizonte e a ocupação contada antes da hora só alteram os resultados nas execuções curtas: a partir de $T=10^4$, a diferença em $\EN$ fica abaixo de 0,03\%. A V4 corrige essas falhas e mede o que as médias não mostram. A fila de espera seguiu a teoria, a Lei de Little se confirmou com tempos medidos cliente a cliente (diferença abaixo de 0,002\%), e os percentis e a fila máxima deram o tamanho dos piores casos. Em C4, com média de 10~s, um em cada vinte clientes fica mais de 30~s.
 
-Ficam como limitações o gerador \texttt{rand()}, cuja qualidade não foi testada, e o fato de o aquecimento ter sido avaliado apenas em três cenários e com uma janela curta.
+Em $T=10^6$, a maior fonte de erro que restou é a variação entre execuções: em C6, ela deixa o IC de $\EN$ com semiamplitude de 6,0\% da média, muito acima da diferença entre V3 e V4 (no máximo 0,0004\%) e do corte das permanências (0,001~s em 98,9~s). Não separamos o quanto ainda resta do viés do início vazio nesse horizonte, e o aquecimento foi avaliado em três cenários, com uma janela curta. Também não testamos \texttt{rand()}; com a SciPy, um teste de Kolmogorov-Smirnov sobre amostras de \texttt{aleatorio()} faria isso com um programa pequeno, sem mexer no simulador.
 
 % ================================================================
 % REFERÊNCIAS
