@@ -249,41 +249,7 @@ Modelos de linguagem apresentam padrões de redação que diferem do registro de
 
 ---
 
-## 2. Reescrita de Trechos Típicos de IA
-
-Abaixo apresentam-se reescritas diretas de parágrafos gerados por IA, aplicando as regras de especificidade, honestidade epistêmica e ritmo do catálogo.
-
-### Exemplo 1: Descrição de Resultados e Concordância Teórica
-
-**Versão gerada por IA:**
-> A discrepância observada não é consequência de erros experimentais, mas da simplificação adotada no modelo teórico. O método apresenta simplicidade, precisão e eficiência: permite obter resultados mais precisos e desempenha um papel fundamental na validação da abordagem. Os resultados mostram uma concordância notável com a teoria, representando um avanço significativo.
-
-**Versão reescrita (Regras 6, 11, 14 e 32):**
-> O tempo de queda medido foi $\Delta t_{\text{exp}} = (0,42 \pm 0,01)\text{ s}$, enquanto a previsão teórica sem atrito indicava $\Delta t_{\text{teo}} = 0,39\text{ s}$. Essa diferença de 7,7% ocorre porque o modelo desconsidera o atrito viscoso com o ar e o atrito de rolamento no trilho. O resultado é satisfatório para o ambiente de ensino, visto que o valor medido permanece dentro da margem de incerteza dos sensores ópticos utilizados (PASCO ME-9215A).
-
----
-
-### Exemplo 2: Justificativa Metodológica e Revisão de Literatura
-
-**Versão gerada por IA:**
-> Vários estudos exploraram o uso de sensores em experimentos didáticos. É importante destacar que as metodologias existentes apresentam limitações que a abordagem proposta busca superar. Ambos os métodos se mostraram eficazes, cada um oferecendo vantagens únicas. A presente investigação propõe uma solução inovadora para otimizar o processo.
-
-**Versão reescrita (Regras 2, 8, 23 e 25):**
-> Santos [3] determinou a constante de Planck utilizando LEDs comerciais, mas dependia da extrapolação visual da reta no gráfico corrente-tensão, o que gerava incertezas da ordem de 15%. Para evitar essa extrapolação gráfica, medimos a tensão de corte diretamente no ponto em que o microamperímetro analogico (Modelo ET-508) registra a primeira leitura acima do ruído ($0,1\ \mu\text{A}$). O método FFT gera resultados idênticos aos do algoritmo ZCM para a identificação de frequência; contudo, a FFT exige maior processamento e foi descartada da análise final em tempo real.
-
----
-
-### Exemplo 3: Tratamento de Erros e Limitações da Bancada
-
-**Versão gerada por IA:**
-> O pré-processamento dos dados foi realizado para garantir a qualidade ideal do sinal. Embora os resultados sejam positivos, determinadas limitações experimentais devem ser consideradas, pois diversos fatores podem ter contribuído para os erros observados.
-
-**Versão reescrita (Regras 7, 21 e 33):**
-> Os primeiros 0,5 segundos de cada gravação de áudio continham ruído de manuseio do operador ao pressionar o botão do smartphone; esse trecho foi cortado antes da análise de frequência. O desvio de 4% na frequência de ressonância deve-se, em grande parte, ao valor nominal do diâmetro interno do tubo ($7,5\text{ cm}$), obtido na especificação do fabricante e não medido diretamente com paquímetro. Como segundo fator, a variação de temperatura da sala durante o experimento ($\pm 1,5\ ^\circ\text{C}$) alterou a velocidade do som teórica em até $0,9\text{ m/s}$.
-
----
-
-## 3. Avaliação de Marcadores de Autoria
+## 2. Avaliação de Marcadores de Autoria
 
 A presença de conectivos isolados ou termos técnicos não permite determinar se um texto foi escrito por humano ou por IA. A análise estilística depende da densidade de estruturas vazias por bloco de texto.
 
