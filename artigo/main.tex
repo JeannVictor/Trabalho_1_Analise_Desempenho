@@ -482,9 +482,9 @@ A Figura~\ref{fig:populacao-final} mostra o que acontece com a população final
   \fonte{Elaboração própria.}
 \end{figure}
 
-Os três cenários se comportam de maneiras diferentes. Em C6, a população para de crescer perto de $\EN=99$: em $T=10^5$ e $T=10^6$, a média ficou em 115 e 118, com ICs ([74; 157] e [76; 159]) que contêm 99. Em C8, chegam 0,1 solicitação por segundo a mais do que o servidor atende, e o excesso se acumula. A previsão é $(\lambda-\mu)T$, e em $T=10^6$ medimos 100.250 contra 100.000, diferença de 0,25\%. A reta só falha em $T=10^2$ (21 contra 10), o que interpretamos como efeito das flutuações, que nessa escala ainda pesam mais que o acúmulo.
+Os três cenários se comportam de maneiras diferentes. Em C6, a população para de crescer perto de $\EN=99$: em $T=10^5$ e $T=10^6$, a média ficou em 115 e 118, com ICs ([74; 157] e [76; 159]) que contêm 99. Em C8, chegam 0,1 solicitação por segundo a mais do que o servidor atende, e o excesso se acumula. Como o servidor fica quase sempre ocupado, até $T$ chegam cerca de $\lambda T$ solicitações e saem cerca de $\mu T$; essa é a aproximação de fluido, que vem da lei dos grandes números (WHITT, 2002). A previsão é $(\lambda-\mu)T$, e em $T=10^6$ medimos 100.250 contra 100.000, diferença de 0,25\%. A reta só falha em $T=10^2$ (21 contra 10), o que interpretamos como efeito das flutuações, que nessa escala ainda pesam mais que o acúmulo.
 
-Em C7, entra em média o mesmo número de solicitações que sai, então não há acúmulo sistemático. Aproximamos a população por um passeio aleatório refletido em zero, o que basta para o nosso propósito: ela sobe e desce ao acaso e nada a puxa de volta. Com variância $\lambda+\mu=2$ por unidade de tempo, a média do módulo é $\sqrt{2\cdot2T/\pi}=\sqrt{4T/\pi}\approx1{,}13\sqrt{T}$. A razão entre a população final e $\sqrt{T}$ ficou entre 1,19 e 1,32, sempre acima de 1,13, mas a previsão ficou dentro do IC nos cinco horizontes. Em $T=10^6$, são 1.128 previstos contra 1.319 medidos, com IC [992; 1.647]. Com 30 repetições, não dá para dizer se essa diferença é só acaso.
+Em C7, entra em média o mesmo número de solicitações que sai, então não há acúmulo sistemático. Aproximamos a população por um passeio aleatório refletido em zero, o que basta para o nosso propósito: ela sobe e desce ao acaso e nada a puxa de volta. Para $T$ grande, esse passeio se comporta como um movimento browniano refletido, que tem a mesma distribuição do módulo de uma normal de média zero (HARRISON, 1985). Com variância $\lambda+\mu=2$ por unidade de tempo, a média do módulo é $\sqrt{2\cdot2T/\pi}=\sqrt{4T/\pi}\approx1{,}13\sqrt{T}$. A razão entre a população final e $\sqrt{T}$ ficou entre 1,19 e 1,32, sempre acima de 1,13, mas a previsão ficou dentro do IC nos cinco horizontes. Em $T=10^6$, são 1.128 previstos contra 1.319 medidos, com IC [992; 1.647]. Com 30 repetições, não dá para dizer se essa diferença é só acaso.
 
 Em C7 e C8, a população não se estabiliza, então as médias de $\EN$ e $\EW$ dependem do horizonte. Em C8, por exemplo, $\EN$ passou de 5.075 em $T=10^5$ para 50.101 em $T=10^6$.
 
@@ -623,6 +623,11 @@ Alfenas: Universidade Federal de Alfenas, 2026. Material didático em slides.
 
 \vspace{0.4em}
 \noindent
+HARRISON, J. Michael. \textbf{Brownian motion and stochastic flow systems}.
+New York: John Wiley \& Sons, 1985.
+
+\vspace{0.4em}
+\noindent
 KENDALL, David G. Stochastic processes occurring in the theory of queues and
 their analysis by the method of the imbedded Markov chain. \textbf{The Annals
 of Mathematical Statistics}, v. 24, n. 3, p. 338--354, 1953. DOI:
@@ -649,6 +654,12 @@ ROSS, Sheldon M. \textbf{Simulation}. 4. ed. San Diego: Academic Press, 2006.
 TRIVEDI, Kishor S. \textbf{Probability and statistics with reliability,
 queuing, and computer science applications}. 2. ed. New York: John Wiley
 \& Sons, 2001.
+
+\vspace{0.4em}
+\noindent
+WHITT, Ward. \textbf{Stochastic-process limits}: an introduction to
+stochastic-process limits and their application to queues. New York:
+Springer, 2002. DOI: \url{https://doi.org/10.1007/b97479}.
 \end{SingleSpace}
 
 \end{document}
